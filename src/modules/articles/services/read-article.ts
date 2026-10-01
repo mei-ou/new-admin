@@ -1,6 +1,9 @@
-import { articleConfig } from "../../../config/articleConfig";
 import { ApiError } from "../../../core/http/errors";
-import { type ArticlePathConfig, buildArticlePath } from "../../../core/security/path-policy";
+import {
+	type ArticlePathConfig,
+	buildArticlePath,
+	FALLBACK_ARTICLE_PATH_CONFIG,
+} from "../../../core/security/path-policy";
 import type { GitProvider } from "../../../providers/git/types";
 import type { RemoteArticle } from "../../../types/article";
 import { parseMarkdownDocument } from "../../../utils/frontmatter-utils";
@@ -26,7 +29,7 @@ export async function readArticle(
 	dependencies: ReadArticleDependencies,
 ): Promise<RemoteArticle> {
 	const storageSlug = parseSlug(storageSlugInput);
-	const pathConfig = dependencies.pathConfig ?? articleConfig;
+	const pathConfig = dependencies.pathConfig ?? FALLBACK_ARTICLE_PATH_CONFIG;
 	const path = buildArticlePath(storageSlug, pathConfig);
 	let headSha: string | undefined;
 	let snapshotEntries: Awaited<ReturnType<GitProvider["listDirectoryAtCommit"]>> | undefined;

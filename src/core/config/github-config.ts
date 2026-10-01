@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ApiError } from "../http/errors";
+import type { ArticlePathConfig } from "../security/path-policy";
 
 const SAFE_REPOSITORY_NAME = /^[A-Za-z0-9_.-]+$/;
 const SAFE_GIT_REF = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/;
@@ -70,13 +71,17 @@ const githubEnvSchema = z
 	})
 	.strip();
 
-export interface GitHubRuntimeConfig {
+/**
+ * GitHub 运行时配置 = 仓库身份 + 文章路径策略。
+ *
+ * 显式继承 `ArticlePathConfig`（而不是依赖结构相同隐式兼容）：Provider 工厂的联合类型
+ * 推断依赖「本类型是 ArticlePathConfig 的子类型」这一关系，显式继承让该关系不随字段增删
+ * 而失效。
+ */
+export interface GitHubRuntimeConfig extends ArticlePathConfig {
 	owner: string;
 	repo: string;
 	branch: string;
-	contentRoot: string;
-	entryFilename: "index.md";
-	usePageBundle: true;
 	token: string;
 }
 

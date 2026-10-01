@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { EditorVisualProjection } from "../../src/modules/editor-core/projection";
 import { createCodeMirrorAdapter } from "../../src/modules/editor-core/adapters/codemirror-adapter";
 import { createVisualEditorAdapter } from "../../src/modules/editor-core/adapters/visual-adapter";
 import {
 	assertEditorCommandAvailable,
 	getEditorCommandDefinition,
 } from "../../src/modules/editor-core/capability-registry";
+import type { EditorVisualProjection } from "../../src/modules/editor-core/projection";
 import { createEditorSession } from "../../src/modules/editor-core/session";
 
 function createSurface(initial = "") {

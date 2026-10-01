@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { applyMarkdownCodecEdit } from "../../src/modules/markdown-codec/edit";
 import { serializeUntouchedMarkdownNodes } from "../../src/modules/markdown-codec/document";
+import { applyMarkdownCodecEdit } from "../../src/modules/markdown-codec/edit";
 import { parseMarkdownDocument } from "../../src/modules/markdown-codec/parser";
 import {
 	canonicalizeMarkdownSource,

@@ -1,5 +1,5 @@
-import type { EditorAdapter, EditorAdapterInput, EditorSurface } from "./editor-adapter";
 import type { EditorAdapterFlush, EditorMode } from "../types";
+import type { EditorAdapter, EditorAdapterInput, EditorSurface } from "./editor-adapter";
 
 function assertMounted(mounted: boolean): void {
 	if (!mounted) throw new TypeError("Editor adapter is not mounted.");

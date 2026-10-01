@@ -1,10 +1,10 @@
-import { createSurfaceEditorAdapter } from "./surface-adapter";
 import {
 	applyEditorVisualProjectionChanges,
 	createEditorVisualProjection,
 	type EditorVisualProjection,
 } from "../projection";
 import type { EditorAdapter, EditorAdapterInput, VisualEditorSurface } from "./editor-adapter";
+import { createSurfaceEditorAdapter } from "./surface-adapter";
 
 /**
  * Kernel-neutral visual entry point. A future Milkdown bridge supplies only this surface contract;

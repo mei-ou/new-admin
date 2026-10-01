@@ -69,6 +69,8 @@ export interface RuntimeEnv {
 	ADMIN_ORIGIN?: string;
 	ACCESS_ALLOWED_EMAILS?: string;
 	ACCESS_ALLOWED_SUBJECTS?: string;
+	/** 站点标识，决定加载哪一份 `src/sites/<id>.ts` 内容模型。文章模块初始化时必填。 */
+	SITE_ID?: string;
 	GITHUB_OWNER?: string;
 	GITHUB_REPO?: string;
 	GITHUB_BRANCH?: string;

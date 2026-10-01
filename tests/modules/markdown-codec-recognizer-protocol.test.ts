@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
+import type { MarkdownRecognizerResult } from "../../src/modules/markdown-codec/recognizer-protocol";
 import {
 	isMarkdownRecognizerResultRecognized,
 	validateMarkdownRecognizerResult,
 } from "../../src/modules/markdown-codec/recognizer-protocol";
-import type { MarkdownRecognizerResult } from "../../src/modules/markdown-codec/recognizer-protocol";
 
 function createResult(
 	source: string,

@@ -1,5 +1,11 @@
 <script lang="ts">
 import { onDestroy, onMount } from "svelte";
+import type { MilkdownEditorHandle } from "../../modules/editor-core/adapters/milkdown/MilkdownEditor.svelte";
+import MilkdownEditor from "../../modules/editor-core/adapters/milkdown/MilkdownEditor.svelte";
+import {
+	createMarkdownVideoSource,
+	type MarkdownVideoProvider,
+} from "../../modules/markdown-codec/video";
 import {
 	ARTICLE_ASSET_MAX_COUNT,
 	type ArticleAssetRole,
@@ -50,8 +56,6 @@ import {
 import CodeMirrorEditor from "./CodeMirrorEditor.svelte";
 import type { CodeMirrorEditorHandle } from "./codemirror-runtime";
 import EditorToolbar from "./EditorToolbar.svelte";
-import MilkdownEditor from "../../modules/editor-core/adapters/milkdown/MilkdownEditor.svelte";
-import type { MilkdownEditorHandle } from "../../modules/editor-core/adapters/milkdown/MilkdownEditor.svelte";
 import {
 	type BlockMarkdownCommand,
 	createBlockMarkdownReplacement,
@@ -93,10 +97,6 @@ import {
 	parseMediaTransactionPreviewPayload,
 	parseMediaTransactionUnknownRecovery,
 } from "./media-transaction-preview-state";
-import {
-	createMarkdownVideoSource,
-	type MarkdownVideoProvider,
-} from "../../modules/markdown-codec/video";
 
 interface Props {
 	mode: "create" | "edit";

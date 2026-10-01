@@ -1,22 +1,22 @@
 import { recognizeMarkdownCallout } from "./callout";
-import { createMarkdownCodecDocument, type CreateMarkdownCodecDocumentResult } from "./document";
 import { recognizeMarkdownDetails } from "./details";
+import { type CreateMarkdownCodecDocumentResult, createMarkdownCodecDocument } from "./document";
 import { recognizeMarkdownMath } from "./math";
 import { recognizeMarkdownMermaid } from "./mermaid";
+import { createMarkdownOpaqueFallback } from "./opaque-fallback";
 import {
 	isMarkdownRecognizerResultRecognized,
-	validateMarkdownRecognizerResult,
 	type MarkdownRecognizerResult,
+	validateMarkdownRecognizerResult,
 } from "./recognizer-protocol";
-import { createMarkdownOpaqueFallback } from "./opaque-fallback";
 import { createMarkdownSourceCursor, type MarkdownSourceLine } from "./source-cursor";
-import { recognizeMarkdownVideo } from "./video";
 import type {
 	MarkdownCodecDiagnostic,
 	MarkdownCodecNode,
 	MarkdownSourceRange,
 	MarkdownStructuredNodeKind,
 } from "./types";
+import { recognizeMarkdownVideo } from "./video";
 
 export interface ParseMarkdownDocumentOptions {
 	readonly maxIterations?: number;

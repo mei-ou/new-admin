@@ -1,5 +1,5 @@
-import { parseMarkdownDocument } from "./parser";
 import { serializeUntouchedMarkdownNodes } from "./document";
+import { parseMarkdownDocument } from "./parser";
 import { isMarkdownCrlfInteriorOffset } from "./source-range";
 import type { MarkdownCodecDocument, MarkdownCodecNode, MarkdownSourceRange } from "./types";
 

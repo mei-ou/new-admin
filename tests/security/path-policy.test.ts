@@ -4,9 +4,12 @@ import {
 	buildArticleResourcePath,
 	buildControlledArticleResourceReference,
 	getArticleResourceFilenameConflictKey,
+	parseArticlePath,
 	parseArticleResourceFilename,
 	parseArticleResourceReference,
+	parseCategoryPath,
 	parseControlledArticleResourceReference,
+	parseTypeDirectory,
 } from "../../src/core/security/path-policy";
 
 const validConfig = {
@@ -14,6 +17,16 @@ const validConfig = {
 	usePageBundle: true,
 	entryFilename: "index.md",
 };
+
+/** tsh520 形态：站点根为 `src/content`，类型目录区分集合，扁平文件 + 中文文件名。 */
+const flatConfig = {
+	contentRoot: "src/content",
+	usePageBundle: false,
+	entryFilename: "index.md",
+	typeDirectory: "posts",
+	filenamePolicy: "unicode",
+	allowCategoryPath: true,
+} as const;
 
 describe("文章仓库路径策略", () => {
 	it("构造唯一允许的 Page Bundle Markdown 路径", () => {
@@ -29,15 +42,40 @@ describe("文章仓库路径策略", () => {
 		).toBe("content/blog-posts/hello-world/index.md");
 	});
 
-	it("拒绝关闭 Page Bundle 后退化为任意文件模式", () => {
-		expect(() => buildArticlePath("hello", { ...validConfig, usePageBundle: false })).toThrow(
-			"仅支持 Page Bundle",
+	it("关闭 Page Bundle 后产出扁平文件路径，而不是退化路径", () => {
+		expect(buildArticlePath("hello", { ...validConfig, usePageBundle: false })).toBe(
+			"src/content/posts/hello.md",
 		);
 	});
 
 	it("拒绝客户端 slug 中的路径穿越与分隔符", () => {
-		for (const slug of ["../secret", "child/path", "child\\path", "%2e%2e", "a..b"]) {
-			expect(() => buildArticlePath(slug, validConfig), slug).toThrow("Slug 校验失败");
+		for (const slug of ["../secret", "child\\path", "%2e%2e", "a..b"]) {
+			expect(() => buildArticlePath(slug, validConfig), slug).toThrow("存储标识校验失败");
+		}
+	});
+
+	it("未开启分类目录时拒绝多段存储标识", () => {
+		expect(() => buildArticlePath("child/path", validConfig)).toThrow("不允许分类子目录");
+	});
+
+	it("未知路径策略与非法配置失败关闭", () => {
+		expect(() =>
+			buildArticlePath("hello", {
+				...validConfig,
+				usePageBundle: "pageBundle" as unknown as boolean,
+			}),
+		).toThrow("文章路径策略配置无效");
+		expect(() =>
+			buildArticlePath("hello", { ...validConfig, filenamePolicy: "anything" as never }),
+		).toThrow("文件名策略配置无效");
+	});
+
+	it("扩展名白名单只允许 .md", () => {
+		for (const extension of [".mdx", ".json", ".yaml", "md", "", ".md.bak"]) {
+			expect(
+				() => buildArticlePath("hello", { ...validConfig, usePageBundle: false, extension }),
+				extension,
+			).toThrow("文章扩展名配置无效");
 		}
 	});
 
@@ -191,7 +229,7 @@ describe("文章仓库路径策略", () => {
 			slug: "hello",
 			path: "../../secrets/token",
 		};
-		expect(() => buildArticlePath(maliciousInput, validConfig)).toThrow("Slug 校验失败");
+		expect(() => buildArticlePath(maliciousInput, validConfig)).toThrow("存储标识校验失败");
 	});
 
 	it("错误消息不回显恶意路径", () => {
@@ -200,6 +238,131 @@ describe("文章仓库路径策略", () => {
 			buildArticlePath(malicious, validConfig);
 		} catch (error) {
 			expect(String(error)).not.toContain(malicious);
+		}
+	});
+});
+
+describe("扁平文件路径策略（tsh520 形态）", () => {
+	it("按类型目录构造扁平文件路径", () => {
+		expect(buildArticlePath("2024-01-01-新年", { ...flatConfig, typeDirectory: "moments" })).toBe(
+			"src/content/moments/2024-01-01-新年.md",
+		);
+	});
+
+	it("允许分类子目录形成多段存储标识", () => {
+		expect(buildArticlePath("旅行/我的文章", flatConfig)).toBe(
+			"src/content/posts/旅行/我的文章.md",
+		);
+	});
+
+	it("支持多段类型目录（notebooks 嵌在 life 之下）", () => {
+		expect(buildArticlePath("我的日记本", { ...flatConfig, typeDirectory: "life/notebooks" })).toBe(
+			"src/content/life/notebooks/我的日记本.md",
+		);
+	});
+
+	it("未开启分类目录时拒绝多段标识", () => {
+		expect(() =>
+			buildArticlePath("旅行/我的文章", { ...flatConfig, allowCategoryPath: false }),
+		).toThrow("不允许分类子目录");
+	});
+
+	it("扁平策略下不提供文章资源路径", () => {
+		expect(() => buildArticleResourcePath("我的文章", "cover.webp", flatConfig)).toThrow(
+			"扁平文件策略不支持文章资源路径",
+		);
+	});
+
+	it("反解扁平路径回到存储标识", () => {
+		expect(parseArticlePath("src/content/posts/旅行/我的文章.md", flatConfig)).toEqual({
+			storageId: "旅行/我的文章",
+		});
+	});
+
+	it("构造与反解可以往返", () => {
+		for (const storageId of ["我的文章", "旅行/我的文章", "2024-01-01-新年"]) {
+			const path = buildArticlePath(storageId, flatConfig);
+			expect(parseArticlePath(path, flatConfig).storageId).toBe(storageId);
+		}
+	});
+
+	it("反解拒绝越界路径、穿越与错误扩展名", () => {
+		for (const path of [
+			"src/content/moments/我的文章.md",
+			"src/other/posts/我的文章.md",
+			"src/content/posts/我的文章.mdx",
+			"src/content/posts/../我的文章.md",
+		]) {
+			expect(() => parseArticlePath(path, flatConfig), path).toThrow();
+		}
+	});
+});
+
+describe("Unicode 文件名边界", () => {
+	it("允许中文、日文、韩文与常见标点", () => {
+		for (const storageId of ["我的文章", "旅行/我的文章", "2024-01-01-新年", "テスト", "제목"]) {
+			expect(() => buildArticlePath(storageId, flatConfig), storageId).not.toThrow();
+		}
+	});
+
+	it("拒绝控制字符、编码分隔符与反斜杠", () => {
+		for (const storageId of ["我的\u0000文章", "我的%2F文章", "我的\\文章", "我的/../文章"]) {
+			expect(() => buildArticlePath(storageId, flatConfig), storageId).toThrow();
+		}
+	});
+
+	it("拒绝 Windows 保留名与首尾点或空白", () => {
+		for (const storageId of [
+			"CON",
+			"con.md",
+			"prn",
+			"aux",
+			"nul",
+			"com1",
+			"lpt9",
+			".hidden",
+			"trailing.",
+			" 前导",
+			"尾随 ",
+		]) {
+			expect(() => buildArticlePath(storageId, flatConfig), storageId).toThrow();
+		}
+	});
+
+	it("拒绝零宽与双向控制字符", () => {
+		for (const storageId of ["我\u200b的文章", "我\u202e的文章", "\ufeff我的文章"]) {
+			expect(() => buildArticlePath(storageId, flatConfig), storageId).toThrow();
+		}
+	});
+
+	it("拒绝非 NFKC 归一的全角混淆输入", () => {
+		expect(() => buildArticlePath("我的／文章", flatConfig)).toThrow();
+	});
+
+	it("ascii-slug 策略拒绝中文", () => {
+		expect(() => buildArticlePath("我的文章", validConfig)).toThrow("存储标识校验失败");
+	});
+});
+
+describe("类型目录与分类路径校验", () => {
+	it("接受空类型目录与多段目录", () => {
+		expect(parseTypeDirectory("")).toBe("");
+		expect(parseTypeDirectory("posts")).toBe("posts");
+		expect(parseTypeDirectory("life/notebooks")).toBe("life/notebooks");
+	});
+
+	it("拒绝越界与穿越的类型目录", () => {
+		for (const directory of ["/posts", "posts/", "posts/../secrets", "posts//x", "..", "."]) {
+			expect(() => parseTypeDirectory(directory), directory).toThrow();
+		}
+	});
+
+	it("分类路径接受中文与多段，拒绝穿越", () => {
+		expect(parseCategoryPath("")).toBe("");
+		expect(parseCategoryPath("旅行")).toBe("旅行");
+		expect(parseCategoryPath("生活/旅行")).toBe("生活/旅行");
+		for (const category of ["/旅行", "旅行/", "../secrets", "旅行/../x", "旅\u0000行"]) {
+			expect(() => parseCategoryPath(category), category).toThrow("分类路径无效");
 		}
 	});
 });

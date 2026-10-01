@@ -1,5 +1,5 @@
-import { validateMarkdownSourceRange } from "./source-range";
 import { parseMarkdownDocument } from "./parser";
+import { validateMarkdownSourceRange } from "./source-range";
 import type { MarkdownCodecDocument, MarkdownCodecNode } from "./types";
 
 function getNodeSource(node: MarkdownCodecNode): string {

@@ -1,14 +1,14 @@
 <script lang="ts">
-import { onMount } from "svelte";
-import type { BridgeProjection, BridgeSourceNodeMetadata } from "./bridge";
 import type { Editor } from "@milkdown/kit/core";
-import { toggleMark, setBlockType, wrapIn } from "@milkdown/kit/prose/commands";
+import { setBlockType, toggleMark, wrapIn } from "@milkdown/kit/prose/commands";
 import { redo, undo } from "@milkdown/kit/prose/history";
+import { Fragment, type Node, Slice } from "@milkdown/kit/prose/model";
 import { wrapInList } from "@milkdown/kit/prose/schema-list";
-import { Fragment, Slice, type Node } from "@milkdown/kit/prose/model";
-import { TextSelection, type Command } from "@milkdown/kit/prose/state";
+import { type Command, TextSelection } from "@milkdown/kit/prose/state";
 import type { EditorView } from "@milkdown/kit/prose/view";
+import { onMount } from "svelte";
 import type { VisualEditorCommand } from "../../types";
+import type { BridgeProjection, BridgeSourceNodeMetadata } from "./bridge";
 
 interface Selection {
 	from: number;

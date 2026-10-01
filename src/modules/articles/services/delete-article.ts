@@ -1,9 +1,9 @@
-import { articleConfig } from "../../../config/articleConfig";
 import { ApiError } from "../../../core/http/errors";
 import {
 	type ArticlePathConfig,
 	buildArticlePath,
 	buildArticleResourcePath,
+	FALLBACK_ARTICLE_PATH_CONFIG,
 } from "../../../core/security/path-policy";
 import type { GitDirectoryEntry, GitProvider } from "../../../providers/git/types";
 import type { ArticleDeleteResult } from "../../../types/article";
@@ -73,7 +73,7 @@ export async function prepareArticleDelete(
 	const storageSlug = parseSlug(storageSlugInput);
 	const expectedHeadSha = parseExpectedSha(expectedHeadShaInput, "分支版本");
 	const expectedArticleSha = parseExpectedSha(expectedArticleShaInput, "文章版本");
-	const pathConfig = dependencies.pathConfig ?? articleConfig;
+	const pathConfig = dependencies.pathConfig ?? FALLBACK_ARTICLE_PATH_CONFIG;
 	const articlePath = buildArticlePath(storageSlug, pathConfig);
 	const bundlePath = articlePath.slice(0, articlePath.lastIndexOf("/"));
 	const [article, entries] = await Promise.all([

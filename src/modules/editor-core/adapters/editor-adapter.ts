@@ -1,5 +1,5 @@
-import type { EditorAdapterFlush, EditorMode } from "../types";
 import type { EditorVisualProjection } from "../projection";
+import type { EditorAdapterFlush, EditorMode } from "../types";
 
 export interface EditorAdapterInput {
 	markdown: string;

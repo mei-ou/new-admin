@@ -1,5 +1,8 @@
-import { articleConfig } from "../../../config/articleConfig";
-import { type ArticlePathConfig, buildArticlePath } from "../../../core/security/path-policy";
+import {
+	type ArticlePathConfig,
+	buildArticlePath,
+	FALLBACK_ARTICLE_PATH_CONFIG,
+} from "../../../core/security/path-policy";
 import type { GitProvider } from "../../../providers/git/types";
 import type { ArticleCommitResult } from "../../../types/article";
 import { parseSlug } from "../../../utils/slug-utils";
@@ -33,7 +36,10 @@ export async function recoverArticleCommit(
 		return undefined;
 	}
 
-	const path = buildArticlePath(storageSlug, dependencies.pathConfig ?? articleConfig);
+	const path = buildArticlePath(
+		storageSlug,
+		dependencies.pathConfig ?? FALLBACK_ARTICLE_PATH_CONFIG,
+	);
 	const file = await dependencies.gitProvider.getFileAtCommit(path, candidateCommitShaInput);
 	if (file.path !== path) {
 		return undefined;

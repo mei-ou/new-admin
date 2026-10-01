@@ -1,5 +1,5 @@
-import { parseMarkdownDocument } from "../markdown-codec/parser";
 import { applyMarkdownCodecEdit } from "../markdown-codec/edit";
+import { parseMarkdownDocument } from "../markdown-codec/parser";
 import type {
 	MarkdownCodecDiagnostic,
 	MarkdownCodecDocument,

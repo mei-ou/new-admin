@@ -1,7 +1,7 @@
 import { isMap, isScalar, parseDocument, Scalar } from "yaml";
-import { articleConfig } from "../../config/articleConfig";
 import {
 	type ArticlePathConfig,
+	FALLBACK_ARTICLE_PATH_CONFIG,
 	parseControlledArticleResourceReference,
 } from "../../core/security/path-policy";
 import { parseMarkdownDocument } from "../../utils/frontmatter-utils";
@@ -404,7 +404,7 @@ export function rewriteMediaTransactionReferences({
 	currentTarget,
 	proposedTarget,
 	expectedReferences,
-	pathConfig = articleConfig,
+	pathConfig = FALLBACK_ARTICLE_PATH_CONFIG,
 }: RewriteMediaTransactionReferencesInput): RewriteMediaTransactionReferencesResult {
 	if (typeof source !== "string") return fail("Markdown 原始内容无效。");
 	const parsedCurrentTarget = parseControlledArticleResourceReference(

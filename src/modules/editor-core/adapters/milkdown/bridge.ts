@@ -1,5 +1,5 @@
-import { applyEditorVisualProjectionChanges, createEditorVisualProjection } from "../../projection";
 import type { EditorVisualProjection } from "../../projection";
+import { applyEditorVisualProjectionChanges, createEditorVisualProjection } from "../../projection";
 
 export interface BridgeProjection {
 	/** Original Markdown source; this remains the only value eligible for persistence. */

@@ -1,9 +1,9 @@
-import { articleConfig } from "../../../config/articleConfig";
 import { ApiError } from "../../../core/http/errors";
 import {
 	type ArticlePathConfig,
 	buildArticlePath,
 	buildArticleResourcePath,
+	FALLBACK_ARTICLE_PATH_CONFIG,
 	parseArticleResourceReference,
 } from "../../../core/security/path-policy";
 import type { AtomicGitFileChange, GitProvider } from "../../../providers/git/types";
@@ -30,7 +30,7 @@ function createWriteContext(
 	pathConfig?: ArticlePathConfig,
 ) {
 	const storageSlug = parseSlug(storageSlugInput);
-	const path = buildArticlePath(storageSlug, pathConfig ?? articleConfig);
+	const path = buildArticlePath(storageSlug, pathConfig ?? FALLBACK_ARTICLE_PATH_CONFIG);
 	const article = parseArticleEditorInput(editorInput);
 	const content = buildMarkdownDocument(article.frontmatter, article.markdown, article.slug);
 	return { storageSlug, path, content, coverReference: article.frontmatter.image };
@@ -210,7 +210,7 @@ export async function createArticle(
 	editorInput: unknown,
 	dependencies: WriteArticleDependencies,
 ): Promise<ArticleCommitResult> {
-	const pathConfig = dependencies.pathConfig ?? articleConfig;
+	const pathConfig = dependencies.pathConfig ?? FALLBACK_ARTICLE_PATH_CONFIG;
 	const context = createWriteContext(storageSlugInput, editorInput, pathConfig);
 	const expectedHeadSha = parseExpectedSha(expectedHeadShaInput);
 	const assets = dependencies.assets ?? [];
@@ -245,7 +245,7 @@ export async function updateArticle(
 	editorInput: unknown,
 	dependencies: WriteArticleDependencies,
 ): Promise<ArticleCommitResult> {
-	const pathConfig = dependencies.pathConfig ?? articleConfig;
+	const pathConfig = dependencies.pathConfig ?? FALLBACK_ARTICLE_PATH_CONFIG;
 	const context = createWriteContext(storageSlugInput, editorInput, pathConfig);
 	const expectedHeadSha = parseExpectedSha(expectedHeadShaInput);
 	const expectedSha = parseExpectedSha(expectedShaInput);

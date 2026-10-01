@@ -1,5 +1,5 @@
-import { markdown } from "@codemirror/lang-markdown";
 import { redo, undo } from "@codemirror/commands";
+import { markdown } from "@codemirror/lang-markdown";
 import { Compartment } from "@codemirror/state";
 import { basicSetup, EditorView } from "codemirror";
 

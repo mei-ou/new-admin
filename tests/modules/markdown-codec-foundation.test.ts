@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { recognizeMarkdownCallout } from "../../src/modules/markdown-codec/callout";
+import { recognizeMarkdownDetails } from "../../src/modules/markdown-codec/details";
 import {
 	createMarkdownCodecDocument,
 	serializeUntouchedMarkdownNodes,
 } from "../../src/modules/markdown-codec/document";
-import { recognizeMarkdownCallout } from "../../src/modules/markdown-codec/callout";
-import { recognizeMarkdownDetails } from "../../src/modules/markdown-codec/details";
-import { createMarkdownOpaqueFallback } from "../../src/modules/markdown-codec/opaque-fallback";
 import {
 	getMarkdownCodecNodeDefinition,
 	MARKDOWN_CODEC_NODE_DEFINITIONS,
 } from "../../src/modules/markdown-codec/node-registry";
+import { createMarkdownOpaqueFallback } from "../../src/modules/markdown-codec/opaque-fallback";
 import {
 	getMarkdownSourceLocation,
 	isMarkdownCrlfInteriorOffset,

@@ -1,8 +1,8 @@
-import { nodeViewCtx, nodesCtx } from "@milkdown/kit/core";
+import { nodesCtx, nodeViewCtx } from "@milkdown/kit/core";
 import type { MilkdownPlugin } from "@milkdown/kit/ctx";
+import type { NodeViewConstructor } from "@milkdown/kit/prose/view";
 import type { NodeSchema, RemarkPluginRaw } from "@milkdown/kit/transformer";
 import type { EditorVisualProjection, EditorVisualProjectionNode } from "../../projection";
-import type { NodeViewConstructor } from "@milkdown/kit/prose/view";
 
 export const FIREFLY_SOURCE_BLOCK = "firefly_source_block";
 export const FIREFLY_SOURCE_INLINE = "firefly_source_inline";

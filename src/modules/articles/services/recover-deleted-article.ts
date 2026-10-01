@@ -1,6 +1,9 @@
-import { articleConfig } from "../../../config/articleConfig";
 import { ApiError } from "../../../core/http/errors";
-import { type ArticlePathConfig, buildArticlePath } from "../../../core/security/path-policy";
+import {
+	type ArticlePathConfig,
+	buildArticlePath,
+	FALLBACK_ARTICLE_PATH_CONFIG,
+} from "../../../core/security/path-policy";
 import type { GitProvider } from "../../../providers/git/types";
 import type { ArticleDeleteResult } from "../../../types/article";
 import { parseSlug } from "../../../utils/slug-utils";
@@ -33,7 +36,10 @@ export async function recoverDeletedArticle(
 
 	const head = await dependencies.gitProvider.getHead();
 	if (head.commitSha !== candidateCommitSha || !head.commitUrl) return undefined;
-	const articlePath = buildArticlePath(storageSlug, dependencies.pathConfig ?? articleConfig);
+	const articlePath = buildArticlePath(
+		storageSlug,
+		dependencies.pathConfig ?? FALLBACK_ARTICLE_PATH_CONFIG,
+	);
 	const bundlePath = articlePath.slice(0, articlePath.lastIndexOf("/"));
 	const originalEntries = await dependencies.gitProvider.listDirectoryAtCommit(
 		bundlePath,

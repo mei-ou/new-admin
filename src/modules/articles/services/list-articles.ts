@@ -1,6 +1,9 @@
 import { z } from "zod";
-import { articleConfig } from "../../../config/articleConfig";
-import { type ArticlePathConfig, buildArticlePath } from "../../../core/security/path-policy";
+import {
+	type ArticlePathConfig,
+	buildArticlePath,
+	FALLBACK_ARTICLE_PATH_CONFIG,
+} from "../../../core/security/path-policy";
 import type { GitProvider } from "../../../providers/git/types";
 import type { ArticleListResult, ArticleSummary, RemoteArticle } from "../../../types/article";
 import { parseSlug } from "../../../utils/slug-utils";
@@ -103,7 +106,7 @@ export async function listArticles(
 	dependencies: ListArticlesDependencies,
 ): Promise<ArticleListResult> {
 	const query = parseArticleListQuery(queryInput);
-	const pathConfig = dependencies.pathConfig ?? articleConfig;
+	const pathConfig = dependencies.pathConfig ?? FALLBACK_ARTICLE_PATH_CONFIG;
 	if (!pathConfig.usePageBundle) {
 		throw new TypeError("P1 仅支持 Page Bundle 文章列表。");
 	}
