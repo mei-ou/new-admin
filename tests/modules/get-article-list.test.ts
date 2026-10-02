@@ -245,4 +245,32 @@ describe("文章列表 API 编排", () => {
 		).rejects.toMatchObject({ status: 503, code: "UPSTREAM_UNAVAILABLE" });
 		expect(getFile).not.toHaveBeenCalled();
 	});
+
+	it("typeId 指向登记的类型时，按该类型派生路径策略与 codec", async () => {
+		const listDirectory = vi.fn<GitProvider["listDirectory"]>().mockResolvedValue([]);
+		const getFile = vi.fn<GitProvider["getFile"]>();
+
+		const response = await handleGetArticleList(
+			{ request: request("?typeId=posts"), principal, env: validEnv },
+			{ createRepositoryFactory: createRepositoryFactory({ listDirectory, getFile }) },
+		);
+
+		expect(response.status).toBe(200);
+		// 路径策略不再来自部署级配置，而是 `typeId` → 内容类型 → 类型目录。
+		// Firefly 的 posts 直接位于内容根下，因此扫描起点仍是内容根。
+		expect(listDirectory).toHaveBeenCalledWith(contentRoot);
+	});
+
+	it("未知 typeId 失败关闭为 400，不回退到任何类型", async () => {
+		const listDirectory = vi.fn<GitProvider["listDirectory"]>();
+		const getFile = vi.fn<GitProvider["getFile"]>();
+
+		await expect(
+			handleGetArticleList(
+				{ request: request("?typeId=not-registered"), principal, env: validEnv },
+				{ createRepositoryFactory: createRepositoryFactory({ listDirectory, getFile }) },
+			),
+		).rejects.toMatchObject({ status: 400, code: "INVALID_REQUEST" });
+		expect(listDirectory).not.toHaveBeenCalled();
+	});
 });

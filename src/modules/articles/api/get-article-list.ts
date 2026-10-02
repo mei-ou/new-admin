@@ -7,16 +7,17 @@ import {
 	type GitHubProviderFactoryOptions,
 } from "../../../providers/git/github-factory";
 import { initializeProvider } from "../../../providers/registry";
+import { toArticlePathConfig } from "../../../sites";
 import type { AuthenticatedPrincipal, RuntimeEnv } from "../../../types/env";
 import type { ProviderFactory } from "../../../types/provider";
-import { resolveArticleCodec } from "../article-schema";
+import { createFrontmatterCodec, resolveArticleContentType } from "../article-schema";
 import {
 	type ListArticlesDependencies,
 	listArticles,
 	parseArticleListQuery as validateArticleListQuery,
 } from "../services/list-articles";
 
-const ALLOWED_QUERY_PARAMETERS = new Set(["page", "pageSize", "query"]);
+const ALLOWED_QUERY_PARAMETERS = new Set(["page", "pageSize", "query", "typeId"]);
 
 export interface ArticleListRequestContext {
 	request: Request;
@@ -48,10 +49,12 @@ function parseArticleListQuery(request: Request): ReturnType<typeof validateArti
 		const page = parameters.get("page");
 		const pageSize = parameters.get("pageSize");
 		const query = parameters.get("query");
+		const typeId = parameters.get("typeId");
 		return validateArticleListQuery({
 			...(page === null ? {} : { page }),
 			...(pageSize === null ? {} : { pageSize }),
 			...(query === null ? {} : { query }),
+			...(typeId === null ? {} : { typeId }),
 		});
 	} catch {
 		throw new ApiError(400, "INVALID_REQUEST", "文章列表查询参数无效。");
@@ -87,10 +90,13 @@ export async function handleGetArticleList(
 		throw new ApiError(404, "NOT_FOUND", "资源不存在。");
 	}
 
+	// 路径策略与 codec 都由**请求选定**的内容类型派生——多类型站点靠这一步才能真正切换类型。
+	// 未指定 `typeId` 时回退到站点唯一类型，因此单类型站点（Firefly）行为完全不变。
+	const contentType = resolveArticleContentType(context.env, query.typeId);
 	const articles = await listArticles(query, {
 		gitProvider: repository.provider,
-		pathConfig: repository.config,
-		codec: resolveArticleCodec(context.env),
+		pathConfig: toArticlePathConfig(contentType, repository.config.contentRoot),
+		codec: createFrontmatterCodec(contentType),
 	});
 	return jsonResponse({ articles });
 }

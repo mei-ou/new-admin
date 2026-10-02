@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { getSoleContentType, resolveSiteConfig } from "../../sites";
+import { getContentType, getSoleContentType, resolveSiteConfig } from "../../sites";
 import { safeText } from "../../sites/field-validators";
 import { fireflyPostsType } from "../../sites/firefly";
 import type { ContentTypeConfig } from "../../sites/types";
@@ -126,5 +126,20 @@ export type ValidatedArticleEditorInput = ArticleEditorInput;
  * 按请求选定类型，属「按类型浏览」的后续步骤，在此之前宁可整体拒绝也不要随便挑一个。
  */
 export function resolveArticleCodec(env: unknown): FrontmatterCodec {
-	return createFrontmatterCodec(getSoleContentType(resolveSiteConfig(env)));
+	return createFrontmatterCodec(resolveArticleContentType(env, undefined));
+}
+
+/**
+ * 解析请求选定的内容类型。
+ *
+ * 未指定 `typeId` 时回退到站点的**唯一**类型——单类型站点（Firefly）因此保持既有行为不变；
+ * 站点含多个类型而请求未指定时失败关闭（`getSoleContentType` 会拒绝），**不猜一个**。
+ * 未知 `typeId` 由 `getContentType` 拒绝为 400。
+ */
+export function resolveArticleContentType(env: unknown, typeId: unknown): ContentTypeConfig {
+	const site = resolveSiteConfig(env);
+	if (typeId === undefined) {
+		return getSoleContentType(site);
+	}
+	return getContentType(site, typeId);
 }

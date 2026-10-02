@@ -43,6 +43,12 @@ const articleListQuerySchema = z
 			.max(ARTICLE_LIST_MAX_PAGE_SIZE)
 			.default(ARTICLE_LIST_DEFAULT_PAGE_SIZE),
 		query: z.string().trim().max(100).default(""),
+		/**
+		 * 内容类型标识。省略时由处理器回退到站点的唯一类型（单类型站点保持既有行为）。
+		 * 这里只做形状约束——「是不是本站点登记的类型」由 `getContentType` 判定为 400，
+		 * 两处各管一段，避免在列表层再维护一份类型清单。
+		 */
+		typeId: z.string().min(1).max(64).optional(),
 	})
 	.strict();
 
@@ -50,6 +56,7 @@ export interface ArticleListQuery {
 	page?: unknown;
 	pageSize?: unknown;
 	query?: unknown;
+	typeId?: unknown;
 }
 
 export type ValidatedArticleListQuery = z.infer<typeof articleListQuerySchema>;
