@@ -4,15 +4,15 @@ import {
 	buildArticlePath,
 	buildArticleResourcePath,
 	FALLBACK_ARTICLE_PATH_CONFIG,
+	parseArticlePath,
 	parseArticleResourceReference,
 } from "../../../core/security/path-policy";
 import type { AtomicGitFileChange, GitProvider } from "../../../providers/git/types";
 import type { ArticleCommitResult } from "../../../types/article";
 import { buildMarkdownDocument } from "../../../utils/frontmatter-utils";
-import { parseSlug } from "../../../utils/slug-utils";
 import type { LoadedArticleAsset } from "../../media/services/load-staged-article-assets";
 import type { ArticleResourceChange } from "../article-resource-changes";
-import { fireflyFrontmatterCodec, parseArticleEditorInput } from "../article-schema";
+import type { FrontmatterCodec } from "../article-schema";
 import { readFrontmatterText } from "../frontmatter-readers";
 
 const GIT_OBJECT_SHA = /^[a-f0-9]{40,64}$/;
@@ -20,6 +20,8 @@ const GIT_OBJECT_SHA = /^[a-f0-9]{40,64}$/;
 export interface WriteArticleDependencies {
 	gitProvider: Pick<GitProvider, "commitFilesAtomically">;
 	pathConfig?: ArticlePathConfig;
+	/** 当前内容类型的 Front-matter codec，由调用方从部署环境解析后注入。 */
+	codec: FrontmatterCodec;
 	assets?: readonly LoadedArticleAsset[];
 	resourceChanges?: readonly ArticleResourceChange[];
 	checkpointCandidateCommit(commitSha: string): Promise<void>;
@@ -28,17 +30,16 @@ export interface WriteArticleDependencies {
 function createWriteContext(
 	storageSlugInput: unknown,
 	editorInput: unknown,
+	codec: FrontmatterCodec,
 	pathConfig?: ArticlePathConfig,
 ) {
-	const storageSlug = parseSlug(storageSlugInput);
-	const path = buildArticlePath(storageSlug, pathConfig ?? FALLBACK_ARTICLE_PATH_CONFIG);
-	const article = parseArticleEditorInput(editorInput);
-	const content = buildMarkdownDocument(
-		fireflyFrontmatterCodec,
-		article.frontmatter,
-		article.markdown,
-		article.slug,
-	);
+	const config = pathConfig ?? FALLBACK_ARTICLE_PATH_CONFIG;
+	const path = buildArticlePath(storageSlugInput, config);
+	// 与读取链路一致：先构造路径、再反解标识。直接用单段 ASCII 的 `parseSlug` 会误拒
+	// 扁平策略下的分类子目录与 Unicode 文件名。
+	const storageSlug = parseArticlePath(path, config).storageId;
+	const article = codec.editorInputSchema.parse(editorInput);
+	const content = buildMarkdownDocument(codec, article.frontmatter, article.markdown, article.slug);
 	return {
 		storageSlug,
 		path,
@@ -222,7 +223,7 @@ export async function createArticle(
 	dependencies: WriteArticleDependencies,
 ): Promise<ArticleCommitResult> {
 	const pathConfig = dependencies.pathConfig ?? FALLBACK_ARTICLE_PATH_CONFIG;
-	const context = createWriteContext(storageSlugInput, editorInput, pathConfig);
+	const context = createWriteContext(storageSlugInput, editorInput, dependencies.codec, pathConfig);
 	const expectedHeadSha = parseExpectedSha(expectedHeadShaInput);
 	const assets = dependencies.assets ?? [];
 	validateCoverAssetBinding(context.coverReference, assets);
@@ -257,7 +258,7 @@ export async function updateArticle(
 	dependencies: WriteArticleDependencies,
 ): Promise<ArticleCommitResult> {
 	const pathConfig = dependencies.pathConfig ?? FALLBACK_ARTICLE_PATH_CONFIG;
-	const context = createWriteContext(storageSlugInput, editorInput, pathConfig);
+	const context = createWriteContext(storageSlugInput, editorInput, dependencies.codec, pathConfig);
 	const expectedHeadSha = parseExpectedSha(expectedHeadShaInput);
 	const expectedSha = parseExpectedSha(expectedShaInput);
 	const assets = dependencies.assets ?? [];

@@ -57,28 +57,45 @@ export interface FrontmatterCodec {
 	readonly schema: z.ZodType<ArticleFrontmatter>;
 	/** 已知字段键集合。迭代顺序即 `contentType.fields` 顺序，决定 YAML 字段顺序。 */
 	readonly knownKeys: ReadonlySet<string>;
+	/**
+	 * 编辑器输入信封（Front-matter + slug + format + markdown）的同源校验。
+	 *
+	 * 放在 codec 里而不是让调用方另取一份：信封里的 `frontmatter` 必须与 `schema` 用同一套
+	 * 字段定义，拆成两处就必然出现「信封按 A 类型校验、序列化按 B 类型」的错位。
+	 */
+	readonly editorInputSchema: z.ZodType<ArticleEditorInput>;
 }
 
 /**
  * 由内容类型派生 codec。
  *
- * 这里不再需要类型投影：`ArticleFrontmatter` 已是记录类型（`Readonly<Record<string, unknown>>`），
- * 动态组装的 Zod object 的输出形状与它天然兼容。此前必须投影，是因为当时
- * `ArticleFrontmatter` 是固定 17 字段的具名接口，而索引签名类型不可赋给具名接口。
+ * `schema` 处不再需要类型投影：`ArticleFrontmatter` 已是记录类型
+ * （`Readonly<Record<string, unknown>>`），动态组装的 Zod object 的输出形状与它天然兼容。
+ * 此前必须投影，是因为当时 `ArticleFrontmatter` 是固定 17 字段的具名接口，
+ * 而索引签名类型不可赋给具名接口。
+ *
+ * `editorInputSchema` 处的断言是另一回事：`exactOptionalPropertyTypes` 下 Zod 的 `.optional()`
+ * 产出 `slug: string | undefined`，而 `ArticleEditorInput.slug?: string` 不允许显式 `undefined`。
  */
 export function createFrontmatterCodec(contentType: ContentTypeConfig): FrontmatterCodec {
 	return {
 		schema: buildArticleFrontmatterSchema(contentType),
 		knownKeys: getFieldKeys(contentType),
+		editorInputSchema: buildArticleEditorInputSchema(
+			contentType,
+		) as unknown as z.ZodType<ArticleEditorInput>,
 	};
 }
 
 /**
  * 过渡期的默认 codec = Firefly。
  *
- * 存在的唯一理由是「内容类型尚未贯穿到全部调用点」（Phase 1b-3 负责透传）。调用点**显式**
- * 引用它，而不是让函数参数静默兜底：这样 Phase 1b-3 只要 grep `fireflyFrontmatterCodec`
- * 就能拿到全部待替换位置，不会漏掉某个调用点，也不会把默认值永久遗忘在代码里。
+ * 服务端链路已全部改为注入（`grep fireflyFrontmatterCodec` 可确认只剩两类**已知残留**）：
+ * - 浏览器端（`ArticleEditor.svelte` / `editor-core/source-document.ts`）：运行在浏览器里，
+ *   拿不到 Worker 环境变量，等编辑页按内容类型渲染时一并处理；
+ * - 4 个媒体事务服务：已冻结的能力，且只服务 Page Bundle 站点。
+ *
+ * **不要新增对它的引用**，尤其不要用它替代注入进来的 codec。
  */
 export const fireflyFrontmatterCodec: FrontmatterCodec = createFrontmatterCodec(fireflyPostsType);
 
@@ -91,15 +108,9 @@ export const fireflyFrontmatterCodec: FrontmatterCodec = createFrontmatterCodec(
 export const articleFrontmatterSchema: z.ZodType<ArticleFrontmatter> =
 	fireflyFrontmatterCodec.schema;
 
-/**
- * 编辑输入边界。与 Front-matter 同源派生，避免信封字段出现第二份定义。
- *
- * 这里保留类型断言，但它**不是** Front-matter 形状的投影（那类投影已随 `ArticleFrontmatter`
- * 记录化一并移除）。原因只在信封字段：`exactOptionalPropertyTypes` 下 Zod 的 `.optional()`
- * 产出 `slug: string | undefined`，而 `ArticleEditorInput.slug?: string` 不允许显式 `undefined`。
- */
+/** Firefly 的编辑输入边界。同样是 codec 的具名别名，供测试直接使用。 */
 export const articleEditorInputSchema: z.ZodType<ArticleEditorInput> =
-	buildArticleEditorInputSchema(fireflyPostsType) as unknown as z.ZodType<ArticleEditorInput>;
+	fireflyFrontmatterCodec.editorInputSchema;
 
 export type ValidatedArticleFrontmatter = ArticleFrontmatter;
 export type ValidatedArticleEditorInput = ArticleEditorInput;
@@ -116,9 +127,4 @@ export type ValidatedArticleEditorInput = ArticleEditorInput;
  */
 export function resolveArticleCodec(env: unknown): FrontmatterCodec {
 	return createFrontmatterCodec(getSoleContentType(resolveSiteConfig(env)));
-}
-
-/** 在所有默认值与边界校验通过后，才允许文章数据进入路径和 Provider 层。 */
-export function parseArticleEditorInput(input: unknown): ValidatedArticleEditorInput {
-	return articleEditorInputSchema.parse(input);
 }

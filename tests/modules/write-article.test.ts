@@ -9,6 +9,37 @@ import {
 import type { GitProvider } from "../../src/providers/git/types";
 import { parseMarkdownDocument } from "../../src/utils/frontmatter-utils";
 
+/**
+ * 本文件的用例都针对 Firefly 内容模型，因此统一注入 Firefly codec。
+ *
+ * codec 是写入服务的必填依赖（刻意不设默认值）。测试里绑定一次即可，
+ * 同时让「这个文件测的是哪套内容模型」一目了然。
+ */
+function createFireflyArticle(
+	storageSlugInput: unknown,
+	expectedHeadShaInput: unknown,
+	editorInput: unknown,
+	dependencies: Omit<WriteArticleDependencies, "codec">,
+) {
+	return createArticle(storageSlugInput, expectedHeadShaInput, editorInput, {
+		...dependencies,
+		codec: fireflyFrontmatterCodec,
+	});
+}
+
+function updateFireflyArticle(
+	storageSlugInput: unknown,
+	expectedHeadShaInput: unknown,
+	expectedShaInput: unknown,
+	editorInput: unknown,
+	dependencies: Omit<WriteArticleDependencies, "codec">,
+) {
+	return updateArticle(storageSlugInput, expectedHeadShaInput, expectedShaInput, editorInput, {
+		...dependencies,
+		codec: fireflyFrontmatterCodec,
+	});
+}
+
 const HEAD_SHA = "d".repeat(40);
 const FILE_SHA = "a".repeat(40);
 const NEXT_FILE_SHA = "b".repeat(40);
@@ -75,7 +106,7 @@ describe("文章写入服务", () => {
 		const provider = createProvider();
 		const checkpointCandidateCommit = createCheckpoint();
 
-		const result = await createArticle("hello-world", HEAD_SHA, editorInput, {
+		const result = await createFireflyArticle("hello-world", HEAD_SHA, editorInput, {
 			gitProvider: provider,
 			checkpointCandidateCommit,
 		});
@@ -115,7 +146,7 @@ describe("文章写入服务", () => {
 			],
 		});
 
-		await createArticle("hello-world", HEAD_SHA, editorInput, {
+		await createFireflyArticle("hello-world", HEAD_SHA, editorInput, {
 			gitProvider: createProvider(commitFilesAtomically),
 			assets,
 			checkpointCandidateCommit: createCheckpoint(),
@@ -136,7 +167,7 @@ describe("文章写入服务", () => {
 		const provider = createProvider();
 		const checkpointCandidateCommit = createCheckpoint();
 
-		await updateArticle("hello-world", HEAD_SHA, FILE_SHA, editorInput, {
+		await updateFireflyArticle("hello-world", HEAD_SHA, FILE_SHA, editorInput, {
 			gitProvider: provider,
 			checkpointCandidateCommit,
 		});
@@ -169,7 +200,7 @@ describe("文章写入服务", () => {
 			],
 		});
 
-		await createArticle(
+		await createFireflyArticle(
 			"hello-world",
 			HEAD_SHA,
 			{
@@ -190,7 +221,7 @@ describe("文章写入服务", () => {
 		for (const image of ["", "https://images.example.com/cover.webp", "./other.png"]) {
 			const provider = createProvider();
 			await expect(
-				createArticle(
+				createFireflyArticle(
 					"hello-world",
 					HEAD_SHA,
 					{ ...editorInput, frontmatter: { ...editorInput.frontmatter, image } },
@@ -216,7 +247,7 @@ describe("文章写入服务", () => {
 			],
 		});
 
-		await updateArticle("hello-world", HEAD_SHA, FILE_SHA, editorInput, {
+		await updateFireflyArticle("hello-world", HEAD_SHA, FILE_SHA, editorInput, {
 			gitProvider: createProvider(commitFilesAtomically),
 			assets,
 			checkpointCandidateCommit: createCheckpoint(),
@@ -241,7 +272,7 @@ describe("文章写入服务", () => {
 			],
 		});
 
-		await updateArticle("hello-world", HEAD_SHA, FILE_SHA, editorInput, {
+		await updateFireflyArticle("hello-world", HEAD_SHA, FILE_SHA, editorInput, {
 			gitProvider: createProvider(commitFilesAtomically),
 			resourceChanges: [
 				{ operation: "delete", filename: "old-guide.pdf", expectedSha: deletedSha },
@@ -262,7 +293,7 @@ describe("文章写入服务", () => {
 			files: [{ path: repositoryPath, fileSha: NEXT_FILE_SHA }],
 		});
 
-		await updateArticle(
+		await updateFireflyArticle(
 			"hello-world",
 			HEAD_SHA,
 			FILE_SHA,
@@ -298,7 +329,7 @@ describe("文章写入服务", () => {
 		]) {
 			const provider = createProvider();
 			await expect(
-				updateArticle(
+				updateFireflyArticle(
 					"hello-world",
 					HEAD_SHA,
 					FILE_SHA,
@@ -329,7 +360,7 @@ describe("文章写入服务", () => {
 			],
 		});
 
-		await updateArticle("hello-world", HEAD_SHA, FILE_SHA, editorInput, {
+		await updateFireflyArticle("hello-world", HEAD_SHA, FILE_SHA, editorInput, {
 			gitProvider: createProvider(commitFilesAtomically),
 			assets: [imageAsset],
 			resourceChanges: [
@@ -356,7 +387,7 @@ describe("文章写入服务", () => {
 		] as const) {
 			const provider = createProvider();
 			await expect(
-				updateArticle("hello-world", HEAD_SHA, FILE_SHA, editorInput, {
+				updateFireflyArticle("hello-world", HEAD_SHA, FILE_SHA, editorInput, {
 					gitProvider: provider,
 					assets: suppliedAssets,
 					resourceChanges: [
@@ -388,7 +419,7 @@ describe("文章写入服务", () => {
 			],
 		});
 
-		await updateArticle("hello-world", HEAD_SHA, FILE_SHA, editorInput, {
+		await updateFireflyArticle("hello-world", HEAD_SHA, FILE_SHA, editorInput, {
 			gitProvider: createProvider(commitFilesAtomically),
 			resourceChanges: [
 				{
@@ -415,7 +446,7 @@ describe("文章写入服务", () => {
 		] as const) {
 			const provider = createProvider();
 			await expect(
-				updateArticle("hello-world", HEAD_SHA, FILE_SHA, editorInput, {
+				updateFireflyArticle("hello-world", HEAD_SHA, FILE_SHA, editorInput, {
 					gitProvider: provider,
 					assets: suppliedAssets,
 					resourceChanges: [
@@ -446,7 +477,7 @@ describe("文章写入服务", () => {
 		]) {
 			const provider = createProvider();
 			await expect(
-				updateArticle("hello-world", HEAD_SHA, FILE_SHA, editorInput, {
+				updateFireflyArticle("hello-world", HEAD_SHA, FILE_SHA, editorInput, {
 					gitProvider: provider,
 					assets: resourceChanges[0]?.filename === imageAsset.finalFilename ? [imageAsset] : [],
 					resourceChanges,
@@ -461,7 +492,7 @@ describe("文章写入服务", () => {
 		for (const invalidSha of [undefined, "", "not-a-sha", "A".repeat(40)]) {
 			const createProviderMock = createProvider();
 			await expect(
-				createArticle("hello-world", invalidSha, editorInput, {
+				createFireflyArticle("hello-world", invalidSha, editorInput, {
 					gitProvider: createProviderMock,
 					checkpointCandidateCommit: createCheckpoint(),
 				}),
@@ -470,7 +501,7 @@ describe("文章写入服务", () => {
 
 			const updateProviderMock = createProvider();
 			await expect(
-				updateArticle("hello-world", HEAD_SHA, invalidSha, editorInput, {
+				updateFireflyArticle("hello-world", HEAD_SHA, invalidSha, editorInput, {
 					gitProvider: updateProviderMock,
 					checkpointCandidateCommit: createCheckpoint(),
 				}),
@@ -486,10 +517,15 @@ describe("文章写入服务", () => {
 			checkpointCandidateCommit: createCheckpoint(),
 		};
 		await expect(
-			createArticle("src/content/posts/hello-world/index.md", HEAD_SHA, editorInput, dependencies),
-		).rejects.toThrow("Slug 校验失败");
+			createFireflyArticle(
+				"src/content/posts/hello-world/index.md",
+				HEAD_SHA,
+				editorInput,
+				dependencies,
+			),
+		).rejects.toThrow("存储标识校验失败");
 		await expect(
-			createArticle(
+			createFireflyArticle(
 				"hello-world",
 				HEAD_SHA,
 				{ ...editorInput, repositoryPath: "README.md" },
@@ -509,7 +545,7 @@ describe("文章写入服务", () => {
 		]) {
 			const provider = createProvider();
 			await expect(
-				createArticle("hello-world", HEAD_SHA, invalidInput, {
+				createFireflyArticle("hello-world", HEAD_SHA, invalidInput, {
 					gitProvider: provider,
 					checkpointCandidateCommit: createCheckpoint(),
 				}),
@@ -526,7 +562,7 @@ describe("文章写入服务", () => {
 		});
 
 		await expect(
-			createArticle("hello-world", HEAD_SHA, editorInput, {
+			createFireflyArticle("hello-world", HEAD_SHA, editorInput, {
 				gitProvider: createProvider(commitFilesAtomically),
 				checkpointCandidateCommit: createCheckpoint(),
 			}),
@@ -536,7 +572,7 @@ describe("文章写入服务", () => {
 	it("拒绝已复核资源内部路径不一致且不调用 Provider", async () => {
 		const provider = createProvider();
 		await expect(
-			createArticle("hello-world", HEAD_SHA, editorInput, {
+			createFireflyArticle("hello-world", HEAD_SHA, editorInput, {
 				gitProvider: provider,
 				assets: [{ ...imageAsset, repositoryPath: "src/content/posts/other/cover.png" }],
 				checkpointCandidateCommit: createCheckpoint(),
@@ -556,7 +592,7 @@ describe("文章写入服务", () => {
 		});
 
 		await expect(
-			createArticle("hello-world", HEAD_SHA, editorInput, {
+			createFireflyArticle("hello-world", HEAD_SHA, editorInput, {
 				gitProvider: createProvider(commitFilesAtomically),
 				assets,
 				checkpointCandidateCommit: createCheckpoint(),
@@ -570,7 +606,7 @@ describe("文章写入服务", () => {
 			.mockRejectedValue(new ApiError(409, "CONFLICT", "远端文件已经变化，请重新加载后再提交。"));
 
 		await expect(
-			updateArticle("hello-world", HEAD_SHA, FILE_SHA, editorInput, {
+			updateFireflyArticle("hello-world", HEAD_SHA, FILE_SHA, editorInput, {
 				gitProvider: createProvider(commitFilesAtomically),
 				checkpointCandidateCommit: createCheckpoint(),
 			}),
@@ -586,7 +622,7 @@ describe("文章写入服务", () => {
 			files: [{ path: customPath, fileSha: NEXT_FILE_SHA }],
 		});
 
-		await createArticle("hello-world", HEAD_SHA, editorInput, {
+		await createFireflyArticle("hello-world", HEAD_SHA, editorInput, {
 			gitProvider: createProvider(commitFilesAtomically),
 			checkpointCandidateCommit: createCheckpoint(),
 			pathConfig: {

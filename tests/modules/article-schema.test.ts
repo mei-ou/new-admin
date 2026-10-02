@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	articleEditorInputSchema,
 	articleFrontmatterSchema,
-	parseArticleEditorInput,
+	fireflyFrontmatterCodec,
 } from "../../src/modules/articles/article-schema";
 
 const minimalFrontmatter = {
@@ -131,7 +131,7 @@ describe("文章 Frontmatter 数据边界", () => {
 
 describe("文章编辑输入边界", () => {
 	it("默认使用 Markdown 格式", () => {
-		const result = parseArticleEditorInput({
+		const result = fireflyFrontmatterCodec.editorInputSchema.parse({
 			frontmatter: minimalFrontmatter,
 			markdown: "# 正文",
 		});

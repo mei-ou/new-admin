@@ -20,7 +20,7 @@ import type { ProviderFactory } from "../../../types/provider";
 import { parseSlug } from "../../../utils/slug-utils";
 import { parseStagedArticleAssetManifest } from "../../media/article-asset-manifest";
 import { loadStagedArticleAssets } from "../../media/services/load-staged-article-assets";
-import { parseArticleEditorInput } from "../article-schema";
+import { resolveArticleCodec } from "../article-schema";
 import { recoverArticleCommit } from "../services/recover-article-commit";
 import { createArticle, type WriteArticleDependencies } from "../services/write-article";
 
@@ -118,7 +118,10 @@ export async function handleCreateArticle(
 		throw new ApiError(400, "INVALID_REQUEST", "文章创建请求无效。");
 	}
 	const storageSlug = parseSlug(bodyResult.data.storageSlug);
-	const article = parseArticleEditorInput(bodyResult.data.article);
+	// codec 由部署环境解析：编辑器信封与 Front-matter 必须用同一套内容类型定义，
+	// 否则会出现「按 A 类型校验、按 B 类型序列化」的错位。
+	const codec = resolveArticleCodec(context.env);
+	const article = codec.editorInputSchema.parse(bodyResult.data.article);
 	const assetManifest = parseStagedArticleAssetManifest(
 		bodyResult.data.assetManifest ?? { version: 1, assets: [] },
 	);
@@ -215,6 +218,7 @@ export async function handleCreateArticle(
 			const result = await createArticle(storageSlug, bodyResult.data.expectedHeadSha, article, {
 				gitProvider: repository.provider,
 				pathConfig: repository.config,
+				codec,
 				assets,
 				checkpointCandidateCommit: async (candidateCommitSha) => {
 					await store.recordCandidateCommit?.({ scope, requestHash, candidateCommitSha });

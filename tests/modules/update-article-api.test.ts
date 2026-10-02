@@ -136,6 +136,7 @@ function createRepositoryFactory(
 }
 
 const env: RuntimeEnv = {
+	SITE_ID: "firefly",
 	RATE_LIMITER: { limit: vi.fn().mockResolvedValue({ success: true }) },
 };
 
@@ -457,7 +458,7 @@ describe("文章更新 API", () => {
 					requestId: "req-no-r2",
 					slug: "hello-world",
 					principal,
-					env: { RATE_LIMITER: limiter },
+					env: { SITE_ID: "firefly", RATE_LIMITER: limiter },
 				},
 				{ createIdempotencyStore: () => store },
 			),
@@ -674,7 +675,7 @@ describe("文章更新 API", () => {
 				requestId: "req-publish",
 				slug: "hello-world",
 				principal,
-				env: { RATE_LIMITER: limiter },
+				env: { SITE_ID: "firefly", RATE_LIMITER: limiter },
 			},
 			{ createIdempotencyStore: () => store, auditWriter: vi.fn() },
 		);
@@ -715,6 +716,7 @@ describe("文章更新 API", () => {
 					slug: "hello-world",
 					principal,
 					env: {
+						SITE_ID: "firefly",
 						RATE_LIMITER: { limit: vi.fn().mockResolvedValue({ success: false }) },
 					},
 				},

@@ -21,7 +21,7 @@ import { parseSlug } from "../../../utils/slug-utils";
 import { parseStagedArticleAssetManifest } from "../../media/article-asset-manifest";
 import { loadStagedArticleAssets } from "../../media/services/load-staged-article-assets";
 import { parseArticleResourceChangeManifest } from "../article-resource-changes";
-import { parseArticleEditorInput } from "../article-schema";
+import { resolveArticleCodec } from "../article-schema";
 import { recoverArticleCommit } from "../services/recover-article-commit";
 import { updateArticle, type WriteArticleDependencies } from "../services/write-article";
 
@@ -132,7 +132,9 @@ export async function handleUpdateArticle(
 	if (!bodyResult.success) {
 		throw new ApiError(400, "INVALID_REQUEST", "文章更新请求无效。");
 	}
-	const article = parseArticleEditorInput(bodyResult.data.article);
+	// codec 由部署环境解析：编辑器信封与 Front-matter 必须用同一套内容类型定义。
+	const codec = resolveArticleCodec(context.env);
+	const article = codec.editorInputSchema.parse(bodyResult.data.article);
 	const assetManifest = parseStagedArticleAssetManifest(
 		bodyResult.data.assetManifest ?? { version: 1, assets: [] },
 	);
@@ -254,6 +256,7 @@ export async function handleUpdateArticle(
 				{
 					gitProvider: repository.provider,
 					pathConfig: repository.config,
+					codec,
 					assets,
 					resourceChanges: resourceChanges.changes,
 					checkpointCandidateCommit: async (candidateCommitSha) => {
