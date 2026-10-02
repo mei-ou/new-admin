@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { parse as parseYaml } from "yaml";
+import { fireflyPostsType } from "../../src/sites/firefly";
 import {
 	buildEditableMarkdownDocument,
 	buildMarkdownDocument,
@@ -44,6 +46,40 @@ describe("Frontmatter 安全序列化", () => {
 	it("拒绝序列化内部字段和非法 slug", () => {
 		expect(() => serializeFrontmatter({ ...minimalFrontmatter, prevSlug: "secret" })).toThrow();
 		expect(() => serializeFrontmatter(minimalFrontmatter, "../secret")).toThrow("Slug 校验失败");
+	});
+});
+
+describe("Frontmatter 字段顺序单一来源", () => {
+	it("序列化键顺序完全跟随站点配置的字段声明顺序", () => {
+		const yaml = serializeFrontmatter(
+			{
+				title: "顺序守卫",
+				published: new Date("2026-08-12T00:00:00.000Z"),
+				updated: new Date("2026-08-13T00:00:00.000Z"),
+				description: "描述",
+				image: "https://example.com/cover.webp",
+				tags: ["tag"],
+				category: "随笔",
+				lang: "zh_CN",
+				author: "作者",
+				sourceLink: "https://example.com/source",
+				licenseName: "CC BY 4.0",
+				licenseUrl: "https://example.com/license",
+				password: "secret",
+				passwordHint: "提示",
+			},
+			"order-guard",
+		);
+
+		const serializedKeys = Object.keys(parseYaml(yaml) as Record<string, unknown>);
+		// slug 不是 Front-matter 字段，按既有约定紧随 title 输出。
+		const declaredOrder = fireflyPostsType.fields.flatMap((field) =>
+			field.key === "title" ? [field.key, "slug"] : [field.key],
+		);
+
+		// 这条断言同时守住两件事：没有第二份字段清单（顺序只能来自站点配置），
+		// 以及站点配置调整字段顺序后序列化结果会随之变化（而不是静默排到末尾）。
+		expect(serializedKeys).toEqual(declaredOrder);
 	});
 });
 

@@ -42,30 +42,36 @@ const YAML_SERIALIZE_OPTIONS = {
 	simpleKeys: true,
 };
 
+/**
+ * 把已验证 Frontmatter 落成可序列化对象。字段顺序**由站点配置的字段声明顺序决定**：
+ * `ARTICLE_FRONTMATTER_KEYS` 是 `Set`，其迭代顺序就是 `contentType.fields` 的顺序。
+ *
+ * 这里刻意不再写一遍字段清单。硬编码顺序是「字段定义的又一份副本」：站点配置新增字段后
+ * 它不会报错，只会让新字段排到 YAML 末尾，且因为不经过下面的日期归一化而写出
+ * `2026-08-12T00:00:00.000Z` 之外的形态。派生顺序后，「改站点配置一处」即可完整决定
+ * 序列化结果。Firefly 现有字段顺序与该派生结果一致，因此 YAML 输出逐字节不变。
+ *
+ * 两个字段级特例属于行为约定，不是字段清单：
+ * - `slug` 并非 Front-matter 字段，但按既有习惯紧随 `title` 输出（空字符串视同未提供，
+ *   与迁移前 `...(slug ? { slug } : {})` 的行为一致）；
+ * - `Date` 一律先转 ISO 字符串，确保 Worker、GitHub 与 Firefly 构建环境结果一致。
+ */
 function createSerializableFrontmatter(
 	frontmatter: ValidatedArticleFrontmatter,
 	slug?: string,
 ): Record<string, unknown> {
-	return {
-		title: frontmatter.title,
-		...(slug ? { slug } : {}),
-		published: frontmatter.published.toISOString(),
-		...(frontmatter.updated ? { updated: frontmatter.updated.toISOString() } : {}),
-		draft: frontmatter.draft,
-		description: frontmatter.description,
-		image: frontmatter.image,
-		tags: frontmatter.tags,
-		category: frontmatter.category,
-		lang: frontmatter.lang,
-		pinned: frontmatter.pinned,
-		author: frontmatter.author,
-		sourceLink: frontmatter.sourceLink,
-		licenseName: frontmatter.licenseName,
-		licenseUrl: frontmatter.licenseUrl,
-		comment: frontmatter.comment,
-		password: frontmatter.password,
-		passwordHint: frontmatter.passwordHint,
-	};
+	const values = frontmatter as unknown as Record<string, unknown>;
+	const serialized: Record<string, unknown> = {};
+	for (const key of ARTICLE_FRONTMATTER_KEYS) {
+		const value = values[key];
+		// 可选字段未提供时整键省略，避免写出 `updated: null` 改变往返语义。
+		if (value === undefined) continue;
+		serialized[key] = value instanceof Date ? value.toISOString() : value;
+		if (key === "title" && slug) {
+			serialized.slug = slug;
+		}
+	}
+	return serialized;
 }
 
 /**
