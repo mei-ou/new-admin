@@ -182,7 +182,7 @@ describe("文章读取服务", () => {
 			readArticle("src/content/posts/hello-world/index.md", {
 				gitProvider: createGitProvider(getFile),
 			}),
-		).rejects.toThrow("Slug 校验失败");
+		).rejects.toThrow("存储标识校验失败");
 		expect(getFile).not.toHaveBeenCalled();
 	});
 

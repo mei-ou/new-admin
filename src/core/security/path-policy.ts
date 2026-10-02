@@ -482,3 +482,31 @@ export function parseArticlePath(
 
 	return { storageId: parseStorageId(storageId, normalized.filenamePolicy) };
 }
+
+/**
+ * 解析 `<contentRoot>/<typeDirectory>`——列表扫描与路径反解的公共起点。
+ *
+ * 单独导出而不是让调用方拼字符串：两个组成部分各自经过安全校验，因此返回值的每个前缀
+ * 都可信；调用方若自行拼接就可能绕过 `parseTypeDirectory` 的逐段校验。
+ */
+export function resolveArticleTypeBasePath(
+	config: ArticlePathConfig = FALLBACK_ARTICLE_PATH_CONFIG,
+): string {
+	return resolveTypeBase(normalizeArticlePathConfig(config));
+}
+
+/**
+ * 构造「文章在类型目录内的相对路径」，供界面展示与 API 别名使用。
+ *
+ * 与 `buildArticlePath` 共用同一份策略，因此别名不会与实际写入路径漂移（此前
+ * `read-article` 里硬编码的 `<slug>/index.md` 在扁平策略下是错的）。返回值只包含类型目录
+ * 以内的相对路径，不含内容根与仓库信息。
+ */
+export function buildArticlePathAlias(
+	storageIdInput: unknown,
+	config: ArticlePathConfig = FALLBACK_ARTICLE_PATH_CONFIG,
+): string {
+	const base = resolveArticleTypeBasePath(config);
+	const fullPath = buildArticlePath(storageIdInput, config);
+	return fullPath.slice(base.length + 1);
+}

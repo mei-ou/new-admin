@@ -1,12 +1,12 @@
 import { z } from "zod";
 import {
 	type ArticlePathConfig,
-	buildArticlePath,
 	FALLBACK_ARTICLE_PATH_CONFIG,
+	parseArticlePath,
+	resolveArticleTypeBasePath,
 } from "../../../core/security/path-policy";
-import type { GitProvider } from "../../../providers/git/types";
+import type { GitDirectoryEntry, GitProvider } from "../../../providers/git/types";
 import type { ArticleListResult, ArticleSummary, RemoteArticle } from "../../../types/article";
-import { parseSlug } from "../../../utils/slug-utils";
 import {
 	readFrontmatterBoolean,
 	readFrontmatterDate,
@@ -21,6 +21,16 @@ export const ARTICLE_LIST_MAX_SCAN = 100;
 export const ARTICLE_LIST_READ_CONCURRENCY = 5;
 export const ARTICLE_LIST_DEFAULT_PAGE_SIZE = 20;
 export const ARTICLE_LIST_MAX_PAGE_SIZE = 50;
+
+/**
+ * 扁平策略下的目录遍历上限。
+ *
+ * 仓库内容是不可信外部输入。没有上限时，一棵深层嵌套目录树就能把一次列表请求放大成
+ * 上千次 GitHub API 调用（进而撞上 Worker CPU 与上游限流），所以深度与访问节点数都要封顶。
+ * 超限不抛错，而是把结果标记为 `truncated`，让调用方知道拿到的是子集而非全部。
+ */
+export const ARTICLE_LIST_MAX_DIRECTORY_DEPTH = 4;
+export const ARTICLE_LIST_MAX_DIRECTORY_NODES = 500;
 
 const articleListQuerySchema = z
 	.object({
@@ -53,6 +63,10 @@ export interface ListArticlesDependencies {
 	pathConfig?: ArticlePathConfig;
 	maxScan?: number;
 	readConcurrency?: number;
+	/** 扁平策略的目录遍历深度上限，默认 `ARTICLE_LIST_MAX_DIRECTORY_DEPTH`。 */
+	maxDirectoryDepth?: number;
+	/** 扁平策略的目录访问节点上限，默认 `ARTICLE_LIST_MAX_DIRECTORY_NODES`。 */
+	maxDirectoryNodes?: number;
 }
 
 function parseBoundedInteger(value: number | undefined, fallback: number, maximum: number): number {
@@ -107,9 +121,114 @@ function matchesQuery(article: ArticleSummary, normalizedQuery: string): boolean
 }
 
 /**
+ * 收集 Page Bundle 形态下的候选存储标识。
+ *
+ * 只接受「路径与名称一致」的目录条目，再用 `parseArticlePath` 反解出标识——反解会逐段执行
+ * 当前站点的文件名策略校验，因此大小写、百分号编码、Windows 保留名等异常目录名会被自然
+ * 排除，不需要在这里再维护一份平行校验。
+ */
+function collectPageBundleCandidates(
+	entries: readonly GitDirectoryEntry[],
+	base: string,
+	config: ArticlePathConfig,
+): string[] {
+	const candidates: string[] = [];
+	for (const entry of entries) {
+		if (entry.type !== "directory" || entry.path !== `${base}/${entry.name}`) {
+			continue;
+		}
+		try {
+			candidates.push(parseArticlePath(`${entry.path}/${config.entryFilename}`, config).storageId);
+		} catch {
+			// 名称不满足当前站点文件名策略 → 不作为候选，也不向调用方暴露具体文件名。
+		}
+	}
+	return candidates;
+}
+
+interface FlatTraversalResult {
+	storageIds: string[];
+	truncated: boolean;
+}
+
+/**
+ * 递归收集扁平策略下的文章文件。
+ *
+ * 只有根目录列举失败才向上抛出（此时无法建立可信候选集合）；更深层的单目录失败只跳过，
+ * 因为仓库是持续变化的，某个子目录消失不应让整个列表请求失败。
+ */
+async function collectFlatCandidates(
+	gitProvider: Pick<GitProvider, "listDirectory">,
+	base: string,
+	config: ArticlePathConfig,
+	limits: { maxDepth: number; maxNodes: number },
+): Promise<FlatTraversalResult> {
+	const storageIds = new Set<string>();
+	const pending: Array<{ path: string; depth: number }> = [{ path: base, depth: 0 }];
+	let visitedNodes = 0;
+	let truncated = false;
+
+	while (pending.length > 0) {
+		const current = pending.shift();
+		if (current === undefined) {
+			break;
+		}
+
+		let entries: readonly GitDirectoryEntry[];
+		try {
+			entries = await gitProvider.listDirectory(current.path);
+		} catch (error) {
+			if (current.path === base) {
+				throw error;
+			}
+			continue;
+		}
+
+		for (const entry of entries) {
+			visitedNodes += 1;
+			if (visitedNodes > limits.maxNodes) {
+				truncated = true;
+				break;
+			}
+			if (entry.path !== `${current.path}/${entry.name}`) {
+				continue;
+			}
+			if (entry.type === "directory") {
+				if (current.depth + 1 > limits.maxDepth) {
+					truncated = true;
+					continue;
+				}
+				pending.push({ path: entry.path, depth: current.depth + 1 });
+				continue;
+			}
+			if (entry.type !== "file") {
+				continue;
+			}
+			try {
+				// 反解同时完成扩展名白名单、文件名策略与分类子目录开关三件事：
+				// 非 `.md`、图片、`_frontmatter.json` 之类都会在这里被排除。
+				storageIds.add(parseArticlePath(entry.path, config).storageId);
+			} catch {
+				// 不符合当前站点路径规则的条目直接跳过。
+			}
+		}
+
+		if (truncated) {
+			break;
+		}
+	}
+
+	return { storageIds: [...storageIds], truncated };
+}
+
+/**
  * 以固定数量和固定并发读取文章摘要。扫描上限在读取任何文章文件前截断，因此一次列表
  * 请求不会随仓库规模无限放大；单篇缺失或格式损坏只计入 skipped，不让整个列表失败。
  * 根目录列表失败仍会直接抛出，因为此时无法建立可信候选集合。
+ *
+ * 扫描形态完全由 `pathConfig` 决定：Page Bundle 只列类型目录的一级子目录，扁平策略递归
+ * 收集 `.md` 文件（深度与节点数有上限）。两种形态共用同一套 `parseArticlePath` 反解，
+ * 因此候选集合与实际写入路径永远同源。
  */
 export async function listArticles(
 	queryInput: ArticleListQuery,
@@ -117,9 +236,6 @@ export async function listArticles(
 ): Promise<ArticleListResult> {
 	const query = parseArticleListQuery(queryInput);
 	const pathConfig = dependencies.pathConfig ?? FALLBACK_ARTICLE_PATH_CONFIG;
-	if (!pathConfig.usePageBundle) {
-		throw new TypeError("P1 仅支持 Page Bundle 文章列表。");
-	}
 	const maxScan = parseBoundedInteger(
 		dependencies.maxScan,
 		ARTICLE_LIST_MAX_SCAN,
@@ -130,25 +246,33 @@ export async function listArticles(
 		ARTICLE_LIST_READ_CONCURRENCY,
 		ARTICLE_LIST_READ_CONCURRENCY,
 	);
+	const maxDirectoryDepth = parseBoundedInteger(
+		dependencies.maxDirectoryDepth,
+		ARTICLE_LIST_MAX_DIRECTORY_DEPTH,
+		ARTICLE_LIST_MAX_DIRECTORY_DEPTH,
+	);
+	const maxDirectoryNodes = parseBoundedInteger(
+		dependencies.maxDirectoryNodes,
+		ARTICLE_LIST_MAX_DIRECTORY_NODES,
+		ARTICLE_LIST_MAX_DIRECTORY_NODES,
+	);
 
-	// 复用路径策略验证配置，并从固定文章路径反推出已经过验证的内容根目录。
-	const sentinelPath = buildArticlePath("list-boundary-check", pathConfig);
-	const contentRootSuffix = `/list-boundary-check/${pathConfig.entryFilename}`;
-	const contentRoot = sentinelPath.slice(0, -contentRootSuffix.length);
-	const entries = await dependencies.gitProvider.listDirectory(contentRoot);
-	const candidates = entries
-		.filter((entry) => entry.type === "directory")
-		.map((entry) => {
-			try {
-				const storageSlug = parseSlug(entry.name);
-				const expectedPath = `${contentRoot}/${storageSlug}`;
-				return entry.path === expectedPath ? storageSlug : null;
-			} catch {
-				return null;
-			}
-		})
-		.filter((storageSlug): storageSlug is string => storageSlug !== null)
-		.sort((left, right) => left.localeCompare(right));
+	// 扫描起点由路径策略给出，调用方不需要（也不应该）自己拼内容根或类型目录。
+	const typeBase = resolveArticleTypeBasePath(pathConfig);
+	let candidates: string[];
+	let traversalTruncated = false;
+	if (pathConfig.usePageBundle) {
+		const entries = await dependencies.gitProvider.listDirectory(typeBase);
+		candidates = collectPageBundleCandidates(entries, typeBase, pathConfig);
+	} else {
+		const collected = await collectFlatCandidates(dependencies.gitProvider, typeBase, pathConfig, {
+			maxDepth: maxDirectoryDepth,
+			maxNodes: maxDirectoryNodes,
+		});
+		candidates = collected.storageIds;
+		traversalTruncated = collected.truncated;
+	}
+	candidates.sort((left, right) => left.localeCompare(right));
 	const selected = candidates.slice(0, maxScan);
 	const summaries: ArticleSummary[] = [];
 	let skipped = 0;
@@ -192,6 +316,6 @@ export async function listArticles(
 		candidateCount: candidates.length,
 		scanned: selected.length,
 		skipped,
-		truncated: candidates.length > selected.length,
+		truncated: traversalTruncated || candidates.length > selected.length,
 	};
 }
