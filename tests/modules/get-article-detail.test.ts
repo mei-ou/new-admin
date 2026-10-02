@@ -200,6 +200,7 @@ describe("文章详情 API 编排", () => {
 
 	it("限流 Binding 缺失时失败关闭", async () => {
 		const withoutLimiter: RuntimeEnv = {
+			SITE_ID: "firefly",
 			GITHUB_OWNER: "firefly-owner",
 			GITHUB_REPO: "firefly-blog",
 			GITHUB_BRANCH: "master",
@@ -222,7 +223,7 @@ describe("文章详情 API 编排", () => {
 				},
 				{ fetch: fetchMock },
 			),
-		).rejects.toThrow("Slug 校验失败");
+		).rejects.toThrow("存储标识校验失败");
 		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
@@ -331,5 +332,18 @@ describe("文章详情 API 编排", () => {
 		}
 		expect(thrown).toBeInstanceOf(ApiError);
 		expect(thrown).toMatchObject({ status: 404, code: "NOT_FOUND" });
+	});
+
+	it("未知 typeId 失败关闭为 400，且不初始化 Provider", async () => {
+		const createRepositoryFactory = vi.fn();
+
+		await expect(
+			handleGetArticleDetail(
+				{ slug: "hello-world", typeId: "not-registered", principal, env: validEnv },
+				{ createRepositoryFactory },
+			),
+		).rejects.toMatchObject({ status: 400, code: "INVALID_REQUEST" });
+		// 内容类型先于 Provider 解析：未登记的类型在读取任何 Secret 之前就被拒绝。
+		expect(createRepositoryFactory).not.toHaveBeenCalled();
 	});
 });

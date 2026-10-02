@@ -8,14 +8,17 @@ import {
 	type GitHubProviderFactoryOptions,
 } from "../../../providers/git/github-factory";
 import { initializeProvider } from "../../../providers/registry";
+import { toArticlePathConfig } from "../../../sites";
 import type { AuthenticatedPrincipal, RuntimeEnv } from "../../../types/env";
 import type { ProviderFactory } from "../../../types/provider";
-import { parseSlug } from "../../../utils/slug-utils";
-import { resolveArticleCodec } from "../article-schema";
+import { parseStorageId } from "../../../utils/slug-utils";
+import { createFrontmatterCodec, resolveArticleContentType } from "../article-schema";
 import { readArticle } from "../services/read-article";
 
 export interface ArticleDetailRequestContext {
 	slug: unknown;
+	/** 请求选定的内容类型标识；省略时回退到站点唯一类型。 */
+	typeId?: unknown;
 	principal: AuthenticatedPrincipal | undefined;
 	env: RuntimeEnv;
 }
@@ -59,8 +62,12 @@ export async function handleGetArticleDetail(
 	if (!context.principal) {
 		throw new ApiError(401, "AUTH_REQUIRED", "需要登录后才能访问。");
 	}
+	// 内容类型先于 Provider 解析：只依赖部署环境，不需要任何 Secret。
+	const contentType = resolveArticleContentType(context.env, context.typeId);
 	// 动态路由参数属于不可信输入，先校验后再消耗限流额度或读取任何 Secret。
-	const slug = parseSlug(context.slug);
+	// 这里只做「形状 + 文件名策略」校验（不含内容根）；与路径相关的校验（扩展名白名单、
+	// 分类子目录开关）由服务层用同一份路径策略执行，避免两处各写一套规则。
+	const storageId = parseStorageId(context.slug, contentType.filenamePolicy);
 
 	// 详情会额外列出资源并执行引用分析，使用独立只读额度避免挤占普通文章列表读取。
 	const includeAssetDetails = resolveAssetDetailsCapability(context.env);
@@ -84,10 +91,11 @@ export async function handleGetArticleDetail(
 		throw new ApiError(404, "NOT_FOUND", "资源不存在。");
 	}
 
-	const article = await readArticle(slug, {
+	const article = await readArticle(storageId, {
 		gitProvider: repository.provider,
-		pathConfig: repository.config,
-		codec: resolveArticleCodec(context.env),
+		// 路径策略与 codec 都由请求选定的内容类型派生，而不是部署级配置。
+		pathConfig: toArticlePathConfig(contentType, repository.config.contentRoot),
+		codec: createFrontmatterCodec(contentType),
 		requireHeadSnapshot: true,
 		includeAssetDetails,
 	});

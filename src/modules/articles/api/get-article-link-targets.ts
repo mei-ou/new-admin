@@ -9,9 +9,10 @@ import {
 	type GitHubProviderFactoryOptions,
 } from "../../../providers/git/github-factory";
 import { initializeProvider } from "../../../providers/registry";
+import { toArticlePathConfig } from "../../../sites";
 import type { AuthenticatedPrincipal, RuntimeEnv } from "../../../types/env";
 import type { ProviderFactory } from "../../../types/provider";
-import { resolveArticleCodec } from "../article-schema";
+import { createFrontmatterCodec, resolveArticleContentType } from "../article-schema";
 import {
 	type ListArticleLinkTargetsDependencies,
 	listArticleLinkTargets,
@@ -35,10 +36,15 @@ export interface ArticleLinkTargetsHandlerDependencies {
 	) => ProviderFactory<ArticleLinkTargetRepository>;
 }
 
-function parseQuery(request: Request): string {
+interface LinkTargetQuery {
+	query: string;
+	typeId: string | undefined;
+}
+
+function parseQuery(request: Request): LinkTargetQuery {
 	const parameters = new URL(request.url).searchParams;
 	for (const key of parameters.keys()) {
-		if (key !== "query" || parameters.getAll(key).length !== 1) {
+		if ((key !== "query" && key !== "typeId") || parameters.getAll(key).length !== 1) {
 			throw new ApiError(400, "INVALID_REQUEST", "文章链接查询参数无效。");
 		}
 	}
@@ -46,7 +52,9 @@ function parseQuery(request: Request): string {
 	if (query.length > 100) {
 		throw new ApiError(400, "INVALID_REQUEST", "文章链接查询参数无效。");
 	}
-	return query;
+	// `typeId` 的合法性交给 `resolveArticleContentType` 判定（未知类型 → 400），
+	// 这里只负责取原始值，不在路由层再维护一份类型清单。
+	return { query, typeId: parameters.get("typeId") ?? undefined };
 }
 
 export async function handleGetArticleLinkTargets(
@@ -59,7 +67,7 @@ export async function handleGetArticleLinkTargets(
 	if (!context.principal) {
 		throw new ApiError(401, "AUTH_REQUIRED", "需要登录后才能访问。");
 	}
-	const query = parseQuery(context.request);
+	const { query, typeId } = parseQuery(context.request);
 	await enforceRateLimit(context.env.RATE_LIMITER, context.principal.sub, "articles-read");
 
 	const factoryOptions: GitHubProviderFactoryOptions = { readEnv: () => context.env };
@@ -71,12 +79,14 @@ export async function handleGetArticleLinkTargets(
 	if (!repository) throw new ApiError(404, "NOT_FOUND", "资源不存在。");
 
 	const articleUrlTemplate = loadArticleUrlTemplate(context.env);
+	// 链接候选必须来自与目标文章相同的类型目录，否则会跨类型互相引用。
+	const contentType = resolveArticleContentType(context.env, typeId);
 	const targets = await listArticleLinkTargets(
 		{ query },
 		{
 			gitProvider: repository.provider,
-			pathConfig: repository.config,
-			codec: resolveArticleCodec(context.env),
+			pathConfig: toArticlePathConfig(contentType, repository.config.contentRoot),
+			codec: createFrontmatterCodec(contentType),
 			...(articleUrlTemplate === undefined ? {} : { articleUrlTemplate }),
 		},
 	);

@@ -11,9 +11,11 @@ export const prerender = false;
  * 动态路由只负责把 Astro/Cloudflare 上下文交给可测试编排层。认证异常、上游异常和
  * 限流错误由全局 Middleware 统一转为带 requestId 的错误响应。
  */
-export const GET: APIRoute = ({ params, locals }) =>
+export const GET: APIRoute = ({ request, params, locals }) =>
 	handleGetArticleDetail({
 		slug: params.slug,
+		// 内容类型由查询参数选定；省略时处理器回退到站点唯一类型（单类型站点行为不变）。
+		typeId: new URL(request.url).searchParams.get("typeId") ?? undefined,
 		principal: locals.principal,
 		env,
 	});
