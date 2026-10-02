@@ -1,5 +1,6 @@
 <script lang="ts">
 import { onDestroy, onMount } from "svelte";
+import { fireflyFrontmatterCodec } from "../../modules/articles/article-schema";
 import type { MilkdownEditorHandle } from "../../modules/editor-core/adapters/milkdown/MilkdownEditor.svelte";
 import MilkdownEditor from "../../modules/editor-core/adapters/milkdown/MilkdownEditor.svelte";
 import {
@@ -844,7 +845,7 @@ async function importMarkdownFile(event: Event): Promise<void> {
 	try {
 		// 先完整读取、解析和映射，全部成功后才替换响应式表单，避免半导入状态。
 		const source = await file.text();
-		const document = parseMarkdownDocument(source);
+		const document = parseMarkdownDocument(fireflyFrontmatterCodec, source);
 		const imported = formFromImportedMarkdown(form, document);
 		const coverReference = parseArticleCoverReference(imported.image);
 		await demoteUnselectedStagedCovers(coverReference);

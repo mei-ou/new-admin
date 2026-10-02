@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { handleGetArticleLinkTargets } from "../../src/modules/articles/api/get-article-link-targets";
+import { fireflyFrontmatterCodec } from "../../src/modules/articles/article-schema";
 import type { GitProvider } from "../../src/providers/git/types";
 import type { RuntimeEnv } from "../../src/types/env";
 import type { ProviderFactory } from "../../src/types/provider";
@@ -35,6 +36,7 @@ function createRepositoryFactory(
 
 function createProvider(): Pick<GitProvider, "listDirectory" | "getFile"> {
 	const markdown = buildMarkdownDocument(
+		fireflyFrontmatterCodec,
 		{
 			title: "Alpha Guide",
 			published: new Date("2026-03-01T00:00:00.000Z"),

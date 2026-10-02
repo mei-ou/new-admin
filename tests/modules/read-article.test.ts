@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../src/core/http/errors";
+import { fireflyFrontmatterCodec } from "../../src/modules/articles/article-schema";
 import { readArticle } from "../../src/modules/articles/services/read-article";
 import type { GitProvider } from "../../src/providers/git/types";
 import { buildMarkdownDocument } from "../../src/utils/frontmatter-utils";
@@ -25,7 +26,12 @@ describe("文章读取服务", () => {
 			path: repositoryPath,
 			sha: FILE_SHA,
 			encoding: "utf-8",
-			content: buildMarkdownDocument(frontmatter, "# 正文\n", "custom-public-slug"),
+			content: buildMarkdownDocument(
+				fireflyFrontmatterCodec,
+				frontmatter,
+				"# 正文\n",
+				"custom-public-slug",
+			),
 		});
 
 		const article = await readArticle("hello-world", {
@@ -54,7 +60,12 @@ describe("文章读取服务", () => {
 			path: repositoryPath,
 			sha: FILE_SHA,
 			encoding: "utf-8",
-			content: buildMarkdownDocument(frontmatter, "# 快照正文\n", "public-url"),
+			content: buildMarkdownDocument(
+				fireflyFrontmatterCodec,
+				frontmatter,
+				"# 快照正文\n",
+				"public-url",
+			),
 		});
 		const getHead = vi.fn<GitProvider["getHead"]>().mockResolvedValue({
 			commitSha: HEAD_SHA,
@@ -116,7 +127,7 @@ describe("文章读取服务", () => {
 			path: repositoryPath,
 			sha: FILE_SHA,
 			encoding: "utf-8",
-			content: buildMarkdownDocument(frontmatter, "# 轻量正文\n"),
+			content: buildMarkdownDocument(fireflyFrontmatterCodec, frontmatter, "# 轻量正文\n"),
 		});
 		const getHead = vi.fn<GitProvider["getHead"]>().mockResolvedValue({
 			commitSha: HEAD_SHA,
@@ -153,7 +164,7 @@ describe("文章读取服务", () => {
 			path: repositoryPath,
 			sha: FILE_SHA,
 			encoding: "utf-8",
-			content: buildMarkdownDocument(frontmatter, "正文", "public-url"),
+			content: buildMarkdownDocument(fireflyFrontmatterCodec, frontmatter, "正文", "public-url"),
 		});
 
 		const article = await readArticle("hello-world", {
@@ -180,7 +191,7 @@ describe("文章读取服务", () => {
 			path: "README.md",
 			sha: FILE_SHA,
 			encoding: "utf-8",
-			content: buildMarkdownDocument(frontmatter, "正文"),
+			content: buildMarkdownDocument(fireflyFrontmatterCodec, frontmatter, "正文"),
 		});
 
 		await expect(
@@ -224,7 +235,7 @@ describe("文章读取服务", () => {
 			path: customPath,
 			sha: FILE_SHA,
 			encoding: "utf-8",
-			content: buildMarkdownDocument(frontmatter, "正文"),
+			content: buildMarkdownDocument(fireflyFrontmatterCodec, frontmatter, "正文"),
 		});
 
 		await readArticle("hello-world", {

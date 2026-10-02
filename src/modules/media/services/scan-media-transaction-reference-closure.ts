@@ -8,6 +8,7 @@ import {
 import type { GitDirectoryEntry, GitProvider } from "../../../providers/git/types";
 import { parseMarkdownDocument } from "../../../utils/frontmatter-utils";
 import { parseSlug } from "../../../utils/slug-utils";
+import { fireflyFrontmatterCodec } from "../../articles/article-schema";
 import type { ArticleAssetReference } from "../article-asset";
 import { analyzeArticleAssetReferences } from "../article-asset-references";
 import {
@@ -119,7 +120,7 @@ async function scanArticle(
 	if (file.path !== path || file.encoding !== "utf-8") throw incomplete();
 	let parsed: ReturnType<typeof parseMarkdownDocument>;
 	try {
-		parsed = parseMarkdownDocument(file.content);
+		parsed = parseMarkdownDocument(fireflyFrontmatterCodec, file.content);
 	} catch {
 		throw incomplete();
 	}

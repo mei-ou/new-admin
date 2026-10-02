@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../src/core/http/errors";
 import { handleGetArticleDetail } from "../../src/modules/articles/api/get-article-detail";
+import { fireflyFrontmatterCodec } from "../../src/modules/articles/article-schema";
 import type { GitProvider } from "../../src/providers/git/types";
 import type { RuntimeEnv } from "../../src/types/env";
 import type { ProviderFactory } from "../../src/types/provider";
@@ -24,6 +25,7 @@ const validEnv: RuntimeEnv = {
 
 function githubFileResponse() {
 	const content = buildMarkdownDocument(
+		fireflyFrontmatterCodec,
 		{
 			title: "你好，Firefly",
 			published: new Date("2026-08-12T00:00:00.000Z"),

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../src/core/http/errors";
+import { fireflyFrontmatterCodec } from "../../src/modules/articles/article-schema";
 import {
 	createArticle,
 	updateArticle,
@@ -90,7 +91,7 @@ describe("文章写入服务", () => {
 		const firstFile = call?.files[0];
 		const content = firstFile && "content" in firstFile ? firstFile.content : undefined;
 		expect(typeof content).toBe("string");
-		const parsed = parseMarkdownDocument(content as string);
+		const parsed = parseMarkdownDocument(fireflyFrontmatterCodec, content as string);
 		expect(parsed.slug).toBe("public-url");
 		expect(parsed.frontmatter.title).toBe("你好，Firefly");
 		expect(parsed.markdown).toBe("# 正文\n");
@@ -151,7 +152,7 @@ describe("文章写入服务", () => {
 		const firstFile = call?.files[0];
 		const content = firstFile && "content" in firstFile ? firstFile.content : undefined;
 		expect(typeof content).toBe("string");
-		const parsed = parseMarkdownDocument(content as string);
+		const parsed = parseMarkdownDocument(fireflyFrontmatterCodec, content as string);
 		expect(parsed.slug).toBe("public-url");
 		expect(parsed.frontmatter.title).toBe("你好，Firefly");
 		expect(parsed.markdown).toBe("# 正文\n");

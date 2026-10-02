@@ -45,31 +45,51 @@ export function buildArticleEditorInputSchema(contentType: ContentTypeConfig) {
 }
 
 /**
- * 当前生效内容类型的 Front-matter 键集合。
+ * Front-matter 编解码上下文（codec）。
  *
- * `frontmatter-utils` 用它区分「已知字段」与「编辑器要原样保留的未知字段」。键集合与
- * 字段校验同源（都来自站点配置），因此不会出现「schema 认某个键、键集合不认」的错位。
- *
- * 过渡形态说明：内容类型参数化尚未贯穿到全部调用点，所以这里先固定按 Firefly 内容类型
- * 派生。Phase 1b 完成内容类型贯穿后，该集合改由调用方按 `contentType` 传入，这个常量即可删除。
+ * 把「用哪套字段定义解析 / 序列化」从模块级常量提升为显式参数。`frontmatter-utils` 的每个
+ * 公开函数都要求传入 codec，因此不存在「拿 Firefly 的 schema 去解析另一内容类型文章」的
+ * 隐式路径；即便传错，严格 schema 也会直接解析失败（失败关闭），而不是静默接受字段错位的文章。
  */
-export const ARTICLE_FRONTMATTER_KEYS: ReadonlySet<string> = getFieldKeys(fireflyPostsType);
+export interface FrontmatterCodec {
+	/** 服务端权威校验 schema，由内容类型的字段定义派生。 */
+	readonly schema: z.ZodType<ArticleFrontmatter>;
+	/** 已知字段键集合。迭代顺序即 `contentType.fields` 顺序，决定 YAML 字段顺序。 */
+	readonly knownKeys: ReadonlySet<string>;
+}
+
+/**
+ * 由内容类型派生 codec。
+ *
+ * `schema` 处是**刻意的类型投影**：按站点配置动态组装的 Zod object 只能推出
+ * `Record<string, unknown>`，而现有消费点依赖具名字段形状（已用 TS 探针确认：索引签名
+ * 类型不可赋给具名接口）。投影把字段形状贴回来，等价性由运行时测试逐项核对。
+ * Phase 1b-1c 把 `ArticleFrontmatter` 记录化之后，这个断言即可移除。
+ */
+export function createFrontmatterCodec(contentType: ContentTypeConfig): FrontmatterCodec {
+	return {
+		schema: buildArticleFrontmatterSchema(contentType) as unknown as z.ZodType<ArticleFrontmatter>,
+		knownKeys: getFieldKeys(contentType),
+	};
+}
+
+/**
+ * 过渡期的默认 codec = Firefly。
+ *
+ * 存在的唯一理由是「内容类型尚未贯穿到全部调用点」（Phase 1b-3 负责透传）。调用点**显式**
+ * 引用它，而不是让函数参数静默兜底：这样 Phase 1b-3 只要 grep `fireflyFrontmatterCodec`
+ * 就能拿到全部待替换位置，不会漏掉某个调用点，也不会把默认值永久遗忘在代码里。
+ */
+export const fireflyFrontmatterCodec: FrontmatterCodec = createFrontmatterCodec(fireflyPostsType);
 
 /**
  * Firefly 内容类型的可写 Front-matter Schema（唯一来源：`src/sites/firefly.ts`）。
  *
- * 这里不再重复声明字段清单：新增或修改字段只需改站点配置一处，不存在两份定义漂移的可能。
- *
- * 显式标注 `z.ZodType<ArticleFrontmatter>` 是**刻意的类型投影**。按站点配置动态组装的
- * Zod object 只能推出 `Record<string, unknown>`；若任由它退化，`read-article`、
- * `list-articles`、编辑器表单等消费点会立刻失去字段类型（已用 TS 探针确认：索引签名
- * 类型不可赋给具名接口）。投影把 Firefly 构建真实读取的字段形状重新贴回来，而等价性
- * 由运行时测试逐项核对：`tests/modules/article-schema.test.ts` 覆盖默认值、必填、
- * 未知字段拒绝、标签上限、控制字符与 URL 安全，`tests/sites/firefly-config.test.ts`
- * 核对「派生结果由站点声明的字段驱动」。
+ * 只是 `fireflyFrontmatterCodec.schema` 的具名别名，供既有消费点与测试直接使用；
+ * 不在这里重新组装 schema，避免出现第二个实例而与 codec 漂移。
  */
 export const articleFrontmatterSchema: z.ZodType<ArticleFrontmatter> =
-	buildArticleFrontmatterSchema(fireflyPostsType) as unknown as z.ZodType<ArticleFrontmatter>;
+	fireflyFrontmatterCodec.schema;
 
 /** 编辑输入边界。与 Front-matter 同源派生，避免信封字段出现第二份定义。 */
 export const articleEditorInputSchema: z.ZodType<ArticleEditorInput> =

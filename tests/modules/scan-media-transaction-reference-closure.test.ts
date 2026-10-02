@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { fireflyFrontmatterCodec } from "../../src/modules/articles/article-schema";
 import {
 	type ScanMediaTransactionReferenceClosureDependencies,
 	scanMediaTransactionReferenceClosure,
@@ -16,6 +17,7 @@ const slugs = ["destination-post", "source-post", "third-post"];
 
 function article(markdown = "正文\n", image = "") {
 	return buildMarkdownDocument(
+		fireflyFrontmatterCodec,
 		{ title: "测试文章", published: new Date("2026-08-17T00:00:00.000Z"), image },
 		markdown,
 	);

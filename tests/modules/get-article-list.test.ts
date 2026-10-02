@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../src/core/http/errors";
 import { handleGetArticleList } from "../../src/modules/articles/api/get-article-list";
+import { fireflyFrontmatterCodec } from "../../src/modules/articles/article-schema";
 import type { GitProvider } from "../../src/providers/git/types";
 import type { RuntimeEnv } from "../../src/types/env";
 import type { ProviderFactory } from "../../src/types/provider";
@@ -52,6 +53,7 @@ function directoryResponse(): Response {
 
 function fileResponse(storageSlug: string): Response {
 	const content = buildMarkdownDocument(
+		fireflyFrontmatterCodec,
 		{
 			title: storageSlug === "alpha-post" ? "Alpha Guide" : "Beta Guide",
 			published: new Date(
@@ -138,6 +140,7 @@ describe("文章列表 API 编排", () => {
 			sha: FILE_SHA,
 			encoding: "utf-8",
 			content: buildMarkdownDocument(
+				fireflyFrontmatterCodec,
 				{ title: "Alpha", published: new Date("2026-03-01T00:00:00.000Z") },
 				"正文",
 			),

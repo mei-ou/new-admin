@@ -9,6 +9,7 @@ import type { RemoteArticle } from "../../../types/article";
 import { parseMarkdownDocument } from "../../../utils/frontmatter-utils";
 import { parseSlug } from "../../../utils/slug-utils";
 import { summarizeArticleAssets } from "../../media/services/summarize-article-assets";
+import { fireflyFrontmatterCodec } from "../article-schema";
 
 export interface ReadArticleDependencies {
 	gitProvider: Pick<GitProvider, "getFile"> &
@@ -61,7 +62,7 @@ export async function readArticle(
 
 	let parsed: ReturnType<typeof parseMarkdownDocument>;
 	try {
-		parsed = parseMarkdownDocument(file.content);
+		parsed = parseMarkdownDocument(fireflyFrontmatterCodec, file.content);
 	} catch {
 		// 仓库内容属于不可信外部数据，不能把 Zod/YAML 解析细节直接暴露给 API 调用者。
 		throw new ApiError(422, "ARTICLE_INVALID", "远端文章格式无效，无法安全打开。");

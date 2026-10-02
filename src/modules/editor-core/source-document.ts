@@ -2,6 +2,7 @@ import {
 	buildEditableMarkdownDocument,
 	parseEditableMarkdownDocument,
 } from "../../utils/frontmatter-utils";
+import { fireflyFrontmatterCodec } from "../articles/article-schema";
 
 export interface EditorSourceDocument {
 	frontmatter: Readonly<Record<string, unknown>>;
@@ -12,7 +13,7 @@ export interface EditorSourceDocument {
 
 /** Parses the complete source atomically; callers receive no partial document on failure. */
 export function parseEditorSourceDocument(source: string): EditorSourceDocument {
-	const parsed = parseEditableMarkdownDocument(source);
+	const parsed = parseEditableMarkdownDocument(fireflyFrontmatterCodec, source);
 	return {
 		frontmatter: { ...parsed.frontmatter },
 		unknownFrontmatter: { ...parsed.unknownFrontmatter },
@@ -30,6 +31,7 @@ export interface BuildEditorSourceDocumentInput {
 
 export function buildEditorSourceDocument(input: BuildEditorSourceDocumentInput): string {
 	return buildEditableMarkdownDocument(
+		fireflyFrontmatterCodec,
 		input.frontmatter,
 		input.unknownFrontmatter,
 		input.markdown,

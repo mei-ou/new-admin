@@ -12,7 +12,7 @@ import { buildMarkdownDocument } from "../../../utils/frontmatter-utils";
 import { parseSlug } from "../../../utils/slug-utils";
 import type { LoadedArticleAsset } from "../../media/services/load-staged-article-assets";
 import type { ArticleResourceChange } from "../article-resource-changes";
-import { parseArticleEditorInput } from "../article-schema";
+import { fireflyFrontmatterCodec, parseArticleEditorInput } from "../article-schema";
 
 const GIT_OBJECT_SHA = /^[a-f0-9]{40,64}$/;
 
@@ -32,7 +32,12 @@ function createWriteContext(
 	const storageSlug = parseSlug(storageSlugInput);
 	const path = buildArticlePath(storageSlug, pathConfig ?? FALLBACK_ARTICLE_PATH_CONFIG);
 	const article = parseArticleEditorInput(editorInput);
-	const content = buildMarkdownDocument(article.frontmatter, article.markdown, article.slug);
+	const content = buildMarkdownDocument(
+		fireflyFrontmatterCodec,
+		article.frontmatter,
+		article.markdown,
+		article.slug,
+	);
 	return { storageSlug, path, content, coverReference: article.frontmatter.image };
 }
 

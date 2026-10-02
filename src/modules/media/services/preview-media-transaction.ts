@@ -12,6 +12,7 @@ import type {
 	GitRepositoryFile,
 } from "../../../providers/git/types";
 import { parseMarkdownDocument } from "../../../utils/frontmatter-utils";
+import { fireflyFrontmatterCodec } from "../../articles/article-schema";
 import type { ArticleAssetReference } from "../article-asset";
 import { ARTICLE_ASSET_MAX_COUNT, ARTICLE_ASSET_TOTAL_MAX_BYTES } from "../media-config";
 import {
@@ -133,7 +134,7 @@ async function readBundle(
 	}
 	let parsedArticle: ReturnType<typeof parseMarkdownDocument>;
 	try {
-		parsedArticle = parseMarkdownDocument(articleFile.content);
+		parsedArticle = parseMarkdownDocument(fireflyFrontmatterCodec, articleFile.content);
 	} catch {
 		throw new ApiError(422, "ARTICLE_INVALID", "远端文章格式无效，无法生成影响预览。");
 	}

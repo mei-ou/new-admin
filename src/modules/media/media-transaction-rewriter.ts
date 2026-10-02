@@ -5,6 +5,7 @@ import {
 	parseControlledArticleResourceReference,
 } from "../../core/security/path-policy";
 import { parseMarkdownDocument } from "../../utils/frontmatter-utils";
+import { fireflyFrontmatterCodec } from "../articles/article-schema";
 import {
 	analyzeArticleAssetReferencesWithRanges,
 	type RangedArticleAssetReference,
@@ -88,7 +89,7 @@ function parseStrictDocument(
 	pathConfig: ArticlePathConfig,
 ): ReturnType<typeof parseMarkdownDocument> {
 	try {
-		return parseMarkdownDocument(source);
+		return parseMarkdownDocument(fireflyFrontmatterCodec, source);
 	} catch {
 		const document = parseDocument(parts.yaml, {
 			schema: "core",
@@ -123,7 +124,7 @@ function parseStrictDocument(
 			parts.yamlStart + scalar.range[1],
 		)}`;
 		try {
-			const parsed = parseMarkdownDocument(sanitized);
+			const parsed = parseMarkdownDocument(fireflyFrontmatterCodec, sanitized);
 			return { ...parsed, frontmatter: { ...parsed.frontmatter, image: scalar.value } };
 		} catch {
 			return fail("Markdown 文档严格解析失败。");

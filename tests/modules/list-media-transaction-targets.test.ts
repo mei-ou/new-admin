@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { fireflyFrontmatterCodec } from "../../src/modules/articles/article-schema";
 import { listMediaTransactionTargets } from "../../src/modules/media/services/list-media-transaction-targets";
 import type { GitProvider } from "../../src/providers/git/types";
 import { buildMarkdownDocument } from "../../src/utils/frontmatter-utils";
@@ -11,6 +12,7 @@ const pathConfig = { contentRoot, entryFilename: "index.md", usePageBundle: true
 
 function article(title: string): string {
 	return buildMarkdownDocument(
+		fireflyFrontmatterCodec,
 		{ title, published: new Date("2026-08-17T00:00:00.000Z") },
 		"正文\n",
 	);

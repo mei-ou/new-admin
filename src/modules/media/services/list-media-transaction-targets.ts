@@ -3,6 +3,7 @@ import { type ArticlePathConfig, buildArticlePath } from "../../../core/security
 import type { GitDirectoryEntry, GitProvider } from "../../../providers/git/types";
 import { parseMarkdownDocument } from "../../../utils/frontmatter-utils";
 import { parseSlug } from "../../../utils/slug-utils";
+import { fireflyFrontmatterCodec } from "../../articles/article-schema";
 import {
 	MEDIA_TRANSACTION_ARTICLE_MAX_COUNT,
 	MEDIA_TRANSACTION_ARTICLE_READ_CONCURRENCY,
@@ -88,7 +89,7 @@ async function readSnapshotArticle(
 	if (file.path !== path || file.encoding !== "utf-8") throw incomplete();
 	let parsed: ReturnType<typeof parseMarkdownDocument>;
 	try {
-		parsed = parseMarkdownDocument(file.content);
+		parsed = parseMarkdownDocument(fireflyFrontmatterCodec, file.content);
 	} catch {
 		throw incomplete();
 	}

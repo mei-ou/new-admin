@@ -1,8 +1,7 @@
 import { parseDocument, stringify } from "yaml";
-import {
-	ARTICLE_FRONTMATTER_KEYS,
-	articleFrontmatterSchema,
-	type ValidatedArticleFrontmatter,
+import type {
+	FrontmatterCodec,
+	ValidatedArticleFrontmatter,
 } from "../modules/articles/article-schema";
 import { parseSlug } from "./slug-utils";
 
@@ -28,11 +27,12 @@ export interface ParsedEditableMarkdownDocument extends ParsedEditableFrontmatte
 }
 
 /**
- * 已知字段集合来自站点配置（见 `article-schema.ts`），不再在这里硬编码键名。
- * 硬编码会形成第二份字段清单：站点配置新增字段后，源码模式会把该字段误判为「未知」，
- * 于是它虽然被保留，却不会经过字段校验，也不会进入稳定的序列化顺序。
+ * 本模块的每个公开函数都要求调用方传入 `codec`（`FrontmatterCodec`）。
+ *
+ * 这是刻意的显式依赖，而不是让函数自己去取「当前站点」：字段定义与校验随内容类型变化，
+ * 一旦某处隐式套用 Firefly 的 schema 去解析另一类型的文章，严格 schema 会直接解析失败，
+ * 而不是静默接受一份字段错位的文章。传错 codec 是失败关闭，不是数据损坏。
  */
-const RESERVED_EDITABLE_FRONTMATTER_KEYS = new Set([...ARTICLE_FRONTMATTER_KEYS, "slug"]);
 
 const YAML_SERIALIZE_OPTIONS = {
 	schema: "core" as const,
@@ -43,8 +43,8 @@ const YAML_SERIALIZE_OPTIONS = {
 };
 
 /**
- * 把已验证 Frontmatter 落成可序列化对象。字段顺序**由站点配置的字段声明顺序决定**：
- * `ARTICLE_FRONTMATTER_KEYS` 是 `Set`，其迭代顺序就是 `contentType.fields` 的顺序。
+ * 把已验证 Frontmatter 落成可序列化对象。字段顺序**由 codec 的字段声明顺序决定**：
+ * `codec.knownKeys` 是 `Set`，其迭代顺序就是 `contentType.fields` 的顺序。
  *
  * 这里刻意不再写一遍字段清单。硬编码顺序是「字段定义的又一份副本」：站点配置新增字段后
  * 它不会报错，只会让新字段排到 YAML 末尾，且因为不经过下面的日期归一化而写出
@@ -57,12 +57,13 @@ const YAML_SERIALIZE_OPTIONS = {
  * - `Date` 一律先转 ISO 字符串，确保 Worker、GitHub 与 Firefly 构建环境结果一致。
  */
 function createSerializableFrontmatter(
+	codec: FrontmatterCodec,
 	frontmatter: ValidatedArticleFrontmatter,
 	slug?: string,
 ): Record<string, unknown> {
 	const values = frontmatter as unknown as Record<string, unknown>;
 	const serialized: Record<string, unknown> = {};
-	for (const key of ARTICLE_FRONTMATTER_KEYS) {
+	for (const key of codec.knownKeys) {
 		const value = values[key];
 		// 可选字段未提供时整键省略，避免写出 `updated: null` 改变往返语义。
 		if (value === undefined) continue;
@@ -80,11 +81,15 @@ function createSerializableFrontmatter(
  * 所有值均交给 YAML 库完成引用和转义，禁止模板字符串拼接用户字段；日期先转 ISO
  * 字符串，以确保 Worker、GitHub 与 Firefly 构建环境得到一致结果。
  */
-export function serializeFrontmatter(frontmatterInput: unknown, slugInput?: unknown): string {
-	const frontmatter = articleFrontmatterSchema.parse(frontmatterInput);
+export function serializeFrontmatter(
+	codec: FrontmatterCodec,
+	frontmatterInput: unknown,
+	slugInput?: unknown,
+): string {
+	const frontmatter = codec.schema.parse(frontmatterInput);
 	const slug = slugInput === undefined ? undefined : parseSlug(slugInput);
 
-	return stringify(createSerializableFrontmatter(frontmatter, slug), YAML_SERIALIZE_OPTIONS);
+	return stringify(createSerializableFrontmatter(codec, frontmatter, slug), YAML_SERIALIZE_OPTIONS);
 }
 
 function parseYamlRecord(source: string): Record<string, unknown> {
@@ -113,7 +118,7 @@ function parseYamlRecord(source: string): Record<string, unknown> {
  * 禁用 merge、自定义标签和 alias，要求唯一字符串键；解析完成后仍必须通过 strict
  * 文章 Schema。YAML 解析成功并不代表数据可以进入业务层。
  */
-export function parseFrontmatter(source: unknown): ParsedFrontmatter {
+export function parseFrontmatter(codec: FrontmatterCodec, source: unknown): ParsedFrontmatter {
 	if (typeof source !== "string" || source.length === 0 || source.length > FRONTMATTER_MAX_LENGTH) {
 		throw new TypeError("Frontmatter 内容无效。");
 	}
@@ -123,7 +128,7 @@ export function parseFrontmatter(source: unknown): ParsedFrontmatter {
 	delete record.slug;
 
 	return {
-		frontmatter: articleFrontmatterSchema.parse(record),
+		frontmatter: codec.schema.parse(record),
 		...(rawSlug === undefined ? {} : { slug: parseSlug(rawSlug) }),
 	};
 }
@@ -131,8 +136,13 @@ export function parseFrontmatter(source: unknown): ParsedFrontmatter {
 /**
  * 编辑器源码模式允许未知 Front-matter 字段存在，但始终把它们与已验证字段分开保存。
  * 业务读取路径仍使用上面的严格解析，避免把编辑器的保真边界扩散到业务层。
+ *
+ * 「已知字段」完全由 `codec.knownKeys` 决定，本模块不再持有任何字段清单副本。
  */
-export function parseEditableFrontmatter(source: unknown): ParsedEditableFrontmatter {
+export function parseEditableFrontmatter(
+	codec: FrontmatterCodec,
+	source: unknown,
+): ParsedEditableFrontmatter {
 	if (typeof source !== "string" || source.length === 0 || source.length > FRONTMATTER_MAX_LENGTH) {
 		throw new TypeError("Frontmatter 内容无效。");
 	}
@@ -143,12 +153,12 @@ export function parseEditableFrontmatter(source: unknown): ParsedEditableFrontma
 	const known: Record<string, unknown> = {};
 	const unknownFrontmatter: Record<string, unknown> = {};
 	for (const [key, value] of Object.entries(record)) {
-		if (ARTICLE_FRONTMATTER_KEYS.has(key)) known[key] = value;
+		if (codec.knownKeys.has(key)) known[key] = value;
 		else unknownFrontmatter[key] = value;
 	}
 
 	return {
-		frontmatter: articleFrontmatterSchema.parse(known),
+		frontmatter: codec.schema.parse(known),
 		unknownFrontmatter,
 		...(rawSlug === undefined ? {} : { slug: parseSlug(rawSlug) }),
 	};
@@ -156,11 +166,12 @@ export function parseEditableFrontmatter(source: unknown): ParsedEditableFrontma
 
 /** Serializes the editor's split known/unknown representation without allowing key collisions. */
 export function serializeEditableFrontmatter(
+	codec: FrontmatterCodec,
 	frontmatterInput: unknown,
 	unknownFrontmatterInput: unknown,
 	slugInput?: unknown,
 ): string {
-	const frontmatter = articleFrontmatterSchema.parse(frontmatterInput);
+	const frontmatter = codec.schema.parse(frontmatterInput);
 	if (
 		typeof unknownFrontmatterInput !== "object" ||
 		unknownFrontmatterInput === null ||
@@ -171,20 +182,22 @@ export function serializeEditableFrontmatter(
 
 	const unknownFrontmatter = unknownFrontmatterInput as Record<string, unknown>;
 	for (const key of Object.keys(unknownFrontmatter)) {
-		if (RESERVED_EDITABLE_FRONTMATTER_KEYS.has(key)) {
+		// `slug` 由信封字段单独承载，不能被未知字段覆盖；其余受保护键来自当前 codec。
+		if (key === "slug" || codec.knownKeys.has(key)) {
 			throw new TypeError(`未知 Frontmatter 字段与受保护字段冲突：${key}。`);
 		}
 	}
 
 	const slug = slugInput === undefined ? undefined : parseSlug(slugInput);
 	return stringify(
-		{ ...createSerializableFrontmatter(frontmatter, slug), ...unknownFrontmatter },
+		{ ...createSerializableFrontmatter(codec, frontmatter, slug), ...unknownFrontmatter },
 		YAML_SERIALIZE_OPTIONS,
 	);
 }
 
 /** 将 Frontmatter 与 Markdown 正文组合为可提交到 GitHub 的完整 `.md` 文档。 */
 export function buildMarkdownDocument(
+	codec: FrontmatterCodec,
 	frontmatterInput: unknown,
 	markdownInput: unknown,
 	slugInput?: unknown,
@@ -193,12 +206,13 @@ export function buildMarkdownDocument(
 		throw new TypeError("Markdown 正文无效。");
 	}
 
-	const yaml = serializeFrontmatter(frontmatterInput, slugInput).trimEnd();
+	const yaml = serializeFrontmatter(codec, frontmatterInput, slugInput).trimEnd();
 	return `${FRONTMATTER_DELIMITER}\n${yaml}\n${FRONTMATTER_DELIMITER}\n${markdownInput}`;
 }
 
 /** Builds the complete editor source while retaining fields unknown to the article schema. */
 export function buildEditableMarkdownDocument(
+	codec: FrontmatterCodec,
 	frontmatterInput: unknown,
 	unknownFrontmatterInput: unknown,
 	markdownInput: unknown,
@@ -209,6 +223,7 @@ export function buildEditableMarkdownDocument(
 	}
 
 	const yaml = serializeEditableFrontmatter(
+		codec,
 		frontmatterInput,
 		unknownFrontmatterInput,
 		slugInput,
@@ -220,7 +235,10 @@ export function buildEditableMarkdownDocument(
  * 拆分导入或从 GitHub 读取的 Markdown 文档。
  * 仅把文档开头第一组独立 `---` 行视为 Frontmatter，正文内的分隔线不会被误切分。
  */
-export function parseMarkdownDocument(source: unknown): ParsedMarkdownDocument {
+export function parseMarkdownDocument(
+	codec: FrontmatterCodec,
+	source: unknown,
+): ParsedMarkdownDocument {
 	if (
 		typeof source !== "string" ||
 		source.length === 0 ||
@@ -243,11 +261,14 @@ export function parseMarkdownDocument(source: unknown): ParsedMarkdownDocument {
 	const yamlStart = FRONTMATTER_DELIMITER.length + 1;
 	const yaml = normalized.slice(yamlStart, closingIndex);
 	const markdown = normalized.slice(closingIndex + closingDelimiter.length);
-	return { ...parseFrontmatter(yaml), markdown };
+	return { ...parseFrontmatter(codec, yaml), markdown };
 }
 
 /** Splits a complete editor source document atomically, including unknown Front-matter fields. */
-export function parseEditableMarkdownDocument(source: unknown): ParsedEditableMarkdownDocument {
+export function parseEditableMarkdownDocument(
+	codec: FrontmatterCodec,
+	source: unknown,
+): ParsedEditableMarkdownDocument {
 	if (
 		typeof source !== "string" ||
 		source.length === 0 ||
@@ -270,21 +291,25 @@ export function parseEditableMarkdownDocument(source: unknown): ParsedEditableMa
 	const yamlStart = FRONTMATTER_DELIMITER.length + 1;
 	const yaml = normalized.slice(yamlStart, closingIndex);
 	const markdown = normalized.slice(closingIndex + closingDelimiter.length);
-	return { ...parseEditableFrontmatter(yaml), markdown };
+	return { ...parseEditableFrontmatter(codec, yaml), markdown };
 }
 
 /**
  * 把任意可接受的 Markdown 文档转换为稳定提交形式。Frontmatter 重新按固定字段顺序
  * 序列化，正文只做 UTF-8 BOM 与 CRLF 归一化，不修剪空格或补写结尾换行。
  */
-export function canonicalizeMarkdownDocument(source: unknown): string {
-	const parsed = parseMarkdownDocument(source);
-	return buildMarkdownDocument(parsed.frontmatter, parsed.markdown, parsed.slug);
+export function canonicalizeMarkdownDocument(codec: FrontmatterCodec, source: unknown): string {
+	const parsed = parseMarkdownDocument(codec, source);
+	return buildMarkdownDocument(codec, parsed.frontmatter, parsed.markdown, parsed.slug);
 }
 
-export function canonicalizeEditableMarkdownDocument(source: unknown): string {
-	const parsed = parseEditableMarkdownDocument(source);
+export function canonicalizeEditableMarkdownDocument(
+	codec: FrontmatterCodec,
+	source: unknown,
+): string {
+	const parsed = parseEditableMarkdownDocument(codec, source);
 	return buildEditableMarkdownDocument(
+		codec,
 		parsed.frontmatter,
 		parsed.unknownFrontmatter,
 		parsed.markdown,

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../src/core/http/errors";
+import { fireflyFrontmatterCodec } from "../../src/modules/articles/article-schema";
 import {
 	ARTICLE_LIST_MAX_SCAN,
 	listArticles,
@@ -26,6 +27,7 @@ function articleDocument(
 	overrides: Record<string, unknown> = {},
 ): string {
 	return buildMarkdownDocument(
+		fireflyFrontmatterCodec,
 		{
 			title,
 			published: new Date(published),
