@@ -10,13 +10,21 @@ import type { GitProvider } from "../../../providers/git/types";
 import type { RemoteArticle } from "../../../types/article";
 import { parseMarkdownDocument } from "../../../utils/frontmatter-utils";
 import { summarizeArticleAssets } from "../../media/services/summarize-article-assets";
-import { fireflyFrontmatterCodec } from "../article-schema";
+import type { FrontmatterCodec } from "../article-schema";
 import { readFrontmatterText } from "../frontmatter-readers";
 
 export interface ReadArticleDependencies {
 	gitProvider: Pick<GitProvider, "getFile"> &
 		Partial<Pick<GitProvider, "getFileAtCommit" | "getHead" | "listDirectoryAtCommit">>;
 	pathConfig?: ArticlePathConfig;
+	/**
+	 * 当前内容类型的 Front-matter codec。
+	 *
+	 * 由调用方从运行时配置注入（`loadGitHubConfig` 已按 `SITE_ID` 解析好），服务层不再
+	 * 自己取「当前站点」：仓库内容是不可信外部数据，用错 codec 会让严格 schema 直接解析失败，
+	 * 而不是静默接受一份字段错位的文章。
+	 */
+	codec: FrontmatterCodec;
 	requireHeadSnapshot?: boolean;
 	includeAssetDetails?: boolean;
 }
@@ -70,7 +78,7 @@ export async function readArticle(
 
 	let parsed: ReturnType<typeof parseMarkdownDocument>;
 	try {
-		parsed = parseMarkdownDocument(fireflyFrontmatterCodec, file.content);
+		parsed = parseMarkdownDocument(dependencies.codec, file.content);
 	} catch {
 		// 仓库内容属于不可信外部数据，不能把 Zod/YAML 解析细节直接暴露给 API 调用者。
 		throw new ApiError(422, "ARTICLE_INVALID", "远端文章格式无效，无法安全打开。");

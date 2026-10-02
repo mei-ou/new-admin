@@ -1,9 +1,25 @@
 import { describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../src/core/http/errors";
 import { fireflyFrontmatterCodec } from "../../src/modules/articles/article-schema";
-import { readArticle } from "../../src/modules/articles/services/read-article";
+import {
+	type ReadArticleDependencies,
+	readArticle,
+} from "../../src/modules/articles/services/read-article";
 import type { GitProvider } from "../../src/providers/git/types";
 import { buildMarkdownDocument } from "../../src/utils/frontmatter-utils";
+
+/**
+ * 本文件的用例都针对 Firefly 内容模型，因此统一注入 Firefly codec。
+ *
+ * 用辅助而不是在每个调用点重复写 `codec`：codec 是服务层的必填依赖（刻意不设默认值），
+ * 测试里显式绑定一次即可，同时让「这个文件测的是哪套内容模型」一目了然。
+ */
+function readFireflyArticle(
+	storageSlugInput: unknown,
+	dependencies: Omit<ReadArticleDependencies, "codec">,
+) {
+	return readArticle(storageSlugInput, { ...dependencies, codec: fireflyFrontmatterCodec });
+}
 
 const FILE_SHA = "a".repeat(40);
 const HEAD_SHA = "b".repeat(40);
@@ -34,7 +50,7 @@ describe("文章读取服务", () => {
 			),
 		});
 
-		const article = await readArticle("hello-world", {
+		const article = await readFireflyArticle("hello-world", {
 			gitProvider: createGitProvider(getFile),
 		});
 
@@ -89,7 +105,7 @@ describe("文章读取服务", () => {
 			},
 		]);
 
-		const article = await readArticle("hello-world", {
+		const article = await readFireflyArticle("hello-world", {
 			gitProvider: { getFile, getFileAtCommit, getHead, listDirectoryAtCommit },
 			requireHeadSnapshot: true,
 		});
@@ -134,7 +150,7 @@ describe("文章读取服务", () => {
 			treeSha: TREE_SHA,
 		});
 		const listDirectoryAtCommit = vi.fn<GitProvider["listDirectoryAtCommit"]>();
-		const article = await readArticle("hello-world", {
+		const article = await readFireflyArticle("hello-world", {
 			gitProvider: { getFile, getFileAtCommit, getHead, listDirectoryAtCommit },
 			requireHeadSnapshot: true,
 			includeAssetDetails: false,
@@ -151,7 +167,7 @@ describe("文章读取服务", () => {
 		const getFile = vi.fn<GitProvider["getFile"]>();
 
 		await expect(
-			readArticle("hello-world", {
+			readFireflyArticle("hello-world", {
 				gitProvider: { getFile },
 				requireHeadSnapshot: true,
 			}),
@@ -167,7 +183,7 @@ describe("文章读取服务", () => {
 			content: buildMarkdownDocument(fireflyFrontmatterCodec, frontmatter, "正文", "public-url"),
 		});
 
-		const article = await readArticle("hello-world", {
+		const article = await readFireflyArticle("hello-world", {
 			gitProvider: createGitProvider(getFile),
 		});
 
@@ -179,7 +195,7 @@ describe("文章读取服务", () => {
 		const getFile = vi.fn<GitProvider["getFile"]>();
 
 		await expect(
-			readArticle("src/content/posts/hello-world/index.md", {
+			readFireflyArticle("src/content/posts/hello-world/index.md", {
 				gitProvider: createGitProvider(getFile),
 			}),
 		).rejects.toThrow("存储标识校验失败");
@@ -195,7 +211,7 @@ describe("文章读取服务", () => {
 		});
 
 		await expect(
-			readArticle("hello-world", { gitProvider: createGitProvider(getFile) }),
+			readFireflyArticle("hello-world", { gitProvider: createGitProvider(getFile) }),
 		).rejects.toMatchObject({ status: 502, code: "UPSTREAM_ERROR" });
 	});
 
@@ -209,7 +225,7 @@ describe("文章读取服务", () => {
 
 		let thrown: unknown;
 		try {
-			await readArticle("hello-world", { gitProvider: createGitProvider(getFile) });
+			await readFireflyArticle("hello-world", { gitProvider: createGitProvider(getFile) });
 		} catch (error) {
 			thrown = error;
 		}
@@ -225,7 +241,7 @@ describe("文章读取服务", () => {
 			.mockRejectedValue(new ApiError(404, "NOT_FOUND", "远端文件不存在。"));
 
 		await expect(
-			readArticle("missing-post", { gitProvider: createGitProvider(getFile) }),
+			readFireflyArticle("missing-post", { gitProvider: createGitProvider(getFile) }),
 		).rejects.toMatchObject({ status: 404, code: "NOT_FOUND" });
 	});
 
@@ -238,7 +254,7 @@ describe("文章读取服务", () => {
 			content: buildMarkdownDocument(fireflyFrontmatterCodec, frontmatter, "正文"),
 		});
 
-		await readArticle("hello-world", {
+		await readFireflyArticle("hello-world", {
 			gitProvider: createGitProvider(getFile),
 			pathConfig: {
 				contentRoot: "content/blog",

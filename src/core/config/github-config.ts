@@ -1,8 +1,4 @@
 import { z } from "zod";
-import {
-	createFrontmatterCodec,
-	type FrontmatterCodec,
-} from "../../modules/articles/article-schema";
 import { getSoleContentType, resolveSiteConfig, toArticlePathConfig } from "../../sites";
 import { ApiError } from "../http/errors";
 import type { ArticlePathConfig } from "../security/path-policy";
@@ -77,14 +73,18 @@ const githubEnvSchema = z
 	.strip();
 
 /**
- * GitHub 运行时配置 = 仓库身份 + 文章路径策略 + 当前内容模型。
+ * GitHub 运行时配置 = 仓库身份 + 文章路径策略 + 当前内容类型标识。
  *
  * 显式继承 `ArticlePathConfig`（而不是依赖结构相同隐式兼容）：Provider 工厂的联合类型
  * 推断依赖「本类型是 ArticlePathConfig 的子类型」这一关系，显式继承让该关系不随字段增删
  * 而失效。
  *
- * 路径策略与 `frontmatterCodec` 都**不再硬编码**，而是由 `SITE_ID` 指向的站点配置派生：
+ * 路径策略与 `typeId` 都**不再硬编码**，而是由 `SITE_ID` 指向的站点配置派生：
  * 这样「换站点/换仓库」只需改部署环境变量，不必碰代码。
+ *
+ * 这里**不放 Front-matter codec**：codec 是「解析一篇具体文章时用哪套字段定义」，随请求
+ * 选定的内容类型而变（多类型站点尤其如此），因此由处理器在请求边界通过
+ * `resolveArticleCodec(env)` 取得，而不是固化进部署级配置。
  */
 export interface GitHubRuntimeConfig extends ArticlePathConfig {
 	owner: string;
@@ -93,8 +93,6 @@ export interface GitHubRuntimeConfig extends ArticlePathConfig {
 	token: string;
 	/** 当前部署选定的内容类型标识（来自 `SITE_ID` → 站点配置）。 */
 	typeId: string;
-	/** 当前内容类型的 Front-matter 编解码上下文，供解析/序列化显式注入。 */
-	frontmatterCodec: FrontmatterCodec;
 }
 
 /**
@@ -126,6 +124,5 @@ export function loadGitHubConfig(input: unknown): GitHubRuntimeConfig {
 		token: result.data.GITHUB_TOKEN,
 		...pathConfig,
 		typeId: contentType.id,
-		frontmatterCodec: createFrontmatterCodec(contentType),
 	};
 }

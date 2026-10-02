@@ -3,6 +3,7 @@ import { buildExpectedArticleUrl } from "../../../core/config/article-url";
 import type { ArticlePathConfig } from "../../../core/security/path-policy";
 import type { GitProvider } from "../../../providers/git/types";
 import { parseSlug } from "../../../utils/slug-utils";
+import type { FrontmatterCodec } from "../article-schema";
 import {
 	readFrontmatterNullableText,
 	readFrontmatterText,
@@ -33,6 +34,8 @@ const linkTargetQuerySchema = z.object({ query: z.string().trim().max(100).defau
 export interface ListArticleLinkTargetsDependencies {
 	gitProvider: Pick<GitProvider, "listDirectory" | "getFile">;
 	pathConfig: ArticlePathConfig;
+	/** 当前内容类型的 Front-matter codec，由调用方从运行时配置注入。 */
+	codec: FrontmatterCodec;
 	articleUrlTemplate?: string;
 }
 
@@ -77,6 +80,7 @@ export async function listArticleLinkTargets(
 		{
 			gitProvider: dependencies.gitProvider,
 			pathConfig: dependencies.pathConfig,
+			codec: dependencies.codec,
 			maxScan: ARTICLE_LIST_MAX_SCAN,
 		},
 	);
@@ -89,6 +93,7 @@ export async function listArticleLinkTargets(
 					const article = await readArticle(summary.storageSlug, {
 						gitProvider: dependencies.gitProvider,
 						pathConfig: dependencies.pathConfig,
+						codec: dependencies.codec,
 					});
 					const slug = parseSlug(article.slug ?? article.storageSlug);
 					return {

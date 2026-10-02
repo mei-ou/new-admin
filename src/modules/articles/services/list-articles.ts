@@ -7,6 +7,7 @@ import {
 } from "../../../core/security/path-policy";
 import type { GitDirectoryEntry, GitProvider } from "../../../providers/git/types";
 import type { ArticleListResult, ArticleSummary, RemoteArticle } from "../../../types/article";
+import type { FrontmatterCodec } from "../article-schema";
 import {
 	readFrontmatterBoolean,
 	readFrontmatterDate,
@@ -61,6 +62,8 @@ export function parseArticleListQuery(input: ArticleListQuery): ValidatedArticle
 export interface ListArticlesDependencies {
 	gitProvider: Pick<GitProvider, "listDirectory" | "getFile">;
 	pathConfig?: ArticlePathConfig;
+	/** 当前内容类型的 Front-matter codec，由调用方从运行时配置注入，并向下传给 `readArticle`。 */
+	codec: FrontmatterCodec;
 	maxScan?: number;
 	readConcurrency?: number;
 	/** 扁平策略的目录遍历深度上限，默认 `ARTICLE_LIST_MAX_DIRECTORY_DEPTH`。 */
@@ -290,6 +293,7 @@ export async function listArticles(
 				const article = await readArticle(storageSlug, {
 					gitProvider: dependencies.gitProvider,
 					pathConfig,
+					codec: dependencies.codec,
 				});
 				summaries.push(toSummary(article));
 			} catch {

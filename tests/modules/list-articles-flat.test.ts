@@ -91,7 +91,10 @@ describe("扁平形态的文章列表扫描", () => {
 	it("递归收集 .md，存储标识保留分类子目录与 Unicode 文件名", async () => {
 		const provider = createProvider(sampleTree(), sampleContents);
 
-		const result = await listArticles({}, { gitProvider: provider, pathConfig: flatConfig });
+		const result = await listArticles(
+			{},
+			{ gitProvider: provider, pathConfig: flatConfig, codec: fireflyFrontmatterCodec },
+		);
 
 		expect(result.items.map((item) => item.storageSlug).sort()).toEqual(
 			["我的文章", "旅行/京都", "notes/deep/深层"].sort(),
@@ -103,7 +106,10 @@ describe("扁平形态的文章列表扫描", () => {
 	it("跳过非 .md 文件，不把它们当成候选", async () => {
 		const provider = createProvider(sampleTree(), sampleContents);
 
-		const result = await listArticles({}, { gitProvider: provider, pathConfig: flatConfig });
+		const result = await listArticles(
+			{},
+			{ gitProvider: provider, pathConfig: flatConfig, codec: fireflyFrontmatterCodec },
+		);
 
 		expect(result.candidateCount).toBe(3);
 	});
@@ -111,7 +117,10 @@ describe("扁平形态的文章列表扫描", () => {
 	it("摘要字段按扁平形态的存储标识读取", async () => {
 		const provider = createProvider(sampleTree(), sampleContents);
 
-		const result = await listArticles({}, { gitProvider: provider, pathConfig: flatConfig });
+		const result = await listArticles(
+			{},
+			{ gitProvider: provider, pathConfig: flatConfig, codec: fireflyFrontmatterCodec },
+		);
 		const item = result.items.find((entry) => entry.storageSlug === "旅行/京都");
 
 		expect(item?.title).toBe("京都");
@@ -123,7 +132,12 @@ describe("扁平形态的文章列表扫描", () => {
 
 		const result = await listArticles(
 			{},
-			{ gitProvider: provider, pathConfig: flatConfig, maxDirectoryDepth: 1 },
+			{
+				gitProvider: provider,
+				pathConfig: flatConfig,
+				codec: fireflyFrontmatterCodec,
+				maxDirectoryDepth: 1,
+			},
 		);
 
 		expect(result.truncated).toBe(true);
@@ -137,7 +151,12 @@ describe("扁平形态的文章列表扫描", () => {
 
 		const result = await listArticles(
 			{},
-			{ gitProvider: provider, pathConfig: flatConfig, maxDirectoryNodes: 2 },
+			{
+				gitProvider: provider,
+				pathConfig: flatConfig,
+				codec: fireflyFrontmatterCodec,
+				maxDirectoryNodes: 2,
+			},
 		);
 
 		expect(result.truncated).toBe(true);
@@ -148,7 +167,10 @@ describe("扁平形态的文章列表扫描", () => {
 		const provider = createProvider({}, {});
 
 		await expect(
-			listArticles({}, { gitProvider: provider, pathConfig: flatConfig }),
+			listArticles(
+				{},
+				{ gitProvider: provider, pathConfig: flatConfig, codec: fireflyFrontmatterCodec },
+			),
 		).rejects.toThrow(`未知目录：${TYPE_BASE}`);
 	});
 
@@ -160,6 +182,7 @@ describe("扁平形态的文章列表扫描", () => {
 			{
 				gitProvider: provider,
 				pathConfig: { ...flatConfig, allowCategoryPath: false },
+				codec: fireflyFrontmatterCodec,
 			},
 		);
 
@@ -176,6 +199,7 @@ describe("扁平形态的文章读取", () => {
 		const article = await readArticle("旅行/京都", {
 			gitProvider: provider,
 			pathConfig: flatConfig,
+			codec: fireflyFrontmatterCodec,
 		});
 
 		expect(article.storageSlug).toBe("旅行/京都");
@@ -201,6 +225,7 @@ describe("扁平形态的文章读取", () => {
 		const result = await readArticle("旅行/京都", {
 			gitProvider: provider,
 			pathConfig: flatConfig,
+			codec: fireflyFrontmatterCodec,
 			requireHeadSnapshot: true,
 		});
 

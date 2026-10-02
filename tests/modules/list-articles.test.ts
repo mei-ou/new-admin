@@ -88,7 +88,10 @@ describe("文章列表服务", () => {
 			},
 		);
 
-		const result = await listArticles({}, { gitProvider: provider });
+		const result = await listArticles(
+			{},
+			{ gitProvider: provider, codec: fireflyFrontmatterCodec },
+		);
 
 		expect(provider.listDirectory).toHaveBeenCalledWith(contentRoot);
 		expect(provider.getFile).toHaveBeenCalledTimes(3);
@@ -115,7 +118,10 @@ describe("文章列表服务", () => {
 			},
 		);
 
-		const result = await listArticles({}, { gitProvider: provider });
+		const result = await listArticles(
+			{},
+			{ gitProvider: provider, codec: fireflyFrontmatterCodec },
+		);
 
 		expect(result.items.map((article) => article.storageSlug)).toEqual(["good-post"]);
 		expect(result).toMatchObject({ scanned: 3, skipped: 2, total: 1 });
@@ -137,7 +143,7 @@ describe("文章列表服务", () => {
 
 		const result = await listArticles(
 			{ query: "Security", page: "2", pageSize: "1" },
-			{ gitProvider: provider },
+			{ gitProvider: provider, codec: fireflyFrontmatterCodec },
 		);
 
 		expect(result.items.map((article) => article.storageSlug)).toEqual(["beta-post"]);
@@ -159,7 +165,10 @@ describe("文章列表服务", () => {
 		);
 		const provider = createProvider(entries, contentBySlug);
 
-		const result = await listArticles({}, { gitProvider: provider });
+		const result = await listArticles(
+			{},
+			{ gitProvider: provider, codec: fireflyFrontmatterCodec },
+		);
 
 		expect(provider.getFile).toHaveBeenCalledTimes(ARTICLE_LIST_MAX_SCAN);
 		expect(result).toMatchObject({
@@ -189,7 +198,10 @@ describe("文章列表服务", () => {
 			};
 		});
 
-		await listArticles({}, { gitProvider: { listDirectory, getFile } });
+		await listArticles(
+			{},
+			{ gitProvider: { listDirectory, getFile }, codec: fireflyFrontmatterCodec },
+		);
 
 		expect(maximumActiveReads).toBe(5);
 	});
@@ -198,11 +210,21 @@ describe("文章列表服务", () => {
 		const provider = createProvider([], {});
 
 		await expect(
-			listArticles({}, { gitProvider: provider, maxScan: ARTICLE_LIST_MAX_SCAN + 1 }),
+			listArticles(
+				{},
+				{
+					gitProvider: provider,
+					codec: fireflyFrontmatterCodec,
+					maxScan: ARTICLE_LIST_MAX_SCAN + 1,
+				},
+			),
 		).rejects.toThrow("文章列表服务配置无效");
-		await expect(listArticles({}, { gitProvider: provider, readConcurrency: 6 })).rejects.toThrow(
-			"文章列表服务配置无效",
-		);
+		await expect(
+			listArticles(
+				{},
+				{ gitProvider: provider, codec: fireflyFrontmatterCodec, readConcurrency: 6 },
+			),
+		).rejects.toThrow("文章列表服务配置无效");
 		expect(provider.listDirectory).not.toHaveBeenCalled();
 	});
 
@@ -213,7 +235,7 @@ describe("文章列表服务", () => {
 		const getFile = vi.fn<GitProvider["getFile"]>();
 
 		await expect(
-			listArticles({}, { gitProvider: { listDirectory, getFile } }),
+			listArticles({}, { gitProvider: { listDirectory, getFile }, codec: fireflyFrontmatterCodec }),
 		).rejects.toMatchObject({
 			status: 503,
 			code: "UPSTREAM_UNAVAILABLE",

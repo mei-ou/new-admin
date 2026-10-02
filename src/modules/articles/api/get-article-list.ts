@@ -9,6 +9,7 @@ import {
 import { initializeProvider } from "../../../providers/registry";
 import type { AuthenticatedPrincipal, RuntimeEnv } from "../../../types/env";
 import type { ProviderFactory } from "../../../types/provider";
+import { resolveArticleCodec } from "../article-schema";
 import {
 	type ListArticlesDependencies,
 	listArticles,
@@ -89,6 +90,7 @@ export async function handleGetArticleList(
 	const articles = await listArticles(query, {
 		gitProvider: repository.provider,
 		pathConfig: repository.config,
+		codec: resolveArticleCodec(context.env),
 	});
 	return jsonResponse({ articles });
 }

@@ -11,6 +11,7 @@ import { initializeProvider } from "../../../providers/registry";
 import type { AuthenticatedPrincipal, RuntimeEnv } from "../../../types/env";
 import type { ProviderFactory } from "../../../types/provider";
 import { parseSlug } from "../../../utils/slug-utils";
+import { resolveArticleCodec } from "../article-schema";
 import { readArticle } from "../services/read-article";
 
 export interface ArticleDetailRequestContext {
@@ -86,6 +87,7 @@ export async function handleGetArticleDetail(
 	const article = await readArticle(slug, {
 		gitProvider: repository.provider,
 		pathConfig: repository.config,
+		codec: resolveArticleCodec(context.env),
 		requireHeadSnapshot: true,
 		includeAssetDetails,
 	});

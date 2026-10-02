@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { getSoleContentType, resolveSiteConfig } from "../../sites";
 import { safeText } from "../../sites/field-validators";
 import { fireflyPostsType } from "../../sites/firefly";
 import type { ContentTypeConfig } from "../../sites/types";
@@ -102,6 +103,20 @@ export const articleEditorInputSchema: z.ZodType<ArticleEditorInput> =
 
 export type ValidatedArticleFrontmatter = ArticleFrontmatter;
 export type ValidatedArticleEditorInput = ArticleEditorInput;
+
+/**
+ * 按部署环境解析当前内容类型的 Front-matter codec。
+ *
+ * 处理器在请求边界用它取得 codec，再**显式**传给服务层；服务层自己不猜「当前站点」。
+ * 这样「用哪套字段定义解析」永远由部署配置决定，且传错会因严格 schema 直接解析失败
+ * （失败关闭），而不是静默接受一份字段错位的文章。
+ *
+ * `SITE_ID` 缺失或指向未登记站点 → 503；站点含多个内容类型时同样失败关闭——多类型需要
+ * 按请求选定类型，属「按类型浏览」的后续步骤，在此之前宁可整体拒绝也不要随便挑一个。
+ */
+export function resolveArticleCodec(env: unknown): FrontmatterCodec {
+	return createFrontmatterCodec(getSoleContentType(resolveSiteConfig(env)));
+}
 
 /** 在所有默认值与边界校验通过后，才允许文章数据进入路径和 Provider 层。 */
 export function parseArticleEditorInput(input: unknown): ValidatedArticleEditorInput {
