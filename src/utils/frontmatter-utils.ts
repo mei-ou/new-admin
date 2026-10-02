@@ -1,5 +1,6 @@
 import { parseDocument, stringify } from "yaml";
 import {
+	ARTICLE_FRONTMATTER_KEYS,
 	articleFrontmatterSchema,
 	type ValidatedArticleFrontmatter,
 } from "../modules/articles/article-schema";
@@ -26,26 +27,11 @@ export interface ParsedEditableMarkdownDocument extends ParsedEditableFrontmatte
 	markdown: string;
 }
 
-const ARTICLE_FRONTMATTER_KEYS = new Set([
-	"title",
-	"published",
-	"updated",
-	"draft",
-	"description",
-	"image",
-	"tags",
-	"category",
-	"lang",
-	"pinned",
-	"author",
-	"sourceLink",
-	"licenseName",
-	"licenseUrl",
-	"comment",
-	"password",
-	"passwordHint",
-]);
-
+/**
+ * 已知字段集合来自站点配置（见 `article-schema.ts`），不再在这里硬编码键名。
+ * 硬编码会形成第二份字段清单：站点配置新增字段后，源码模式会把该字段误判为「未知」，
+ * 于是它虽然被保留，却不会经过字段校验，也不会进入稳定的序列化顺序。
+ */
 const RESERVED_EDITABLE_FRONTMATTER_KEYS = new Set([...ARTICLE_FRONTMATTER_KEYS, "slug"]);
 
 const YAML_SERIALIZE_OPTIONS = {

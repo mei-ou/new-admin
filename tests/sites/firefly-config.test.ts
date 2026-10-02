@@ -1,20 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { buildArticlePath } from "../../src/core/security/path-policy";
-import {
-	articleFrontmatterSchema,
-	buildArticleFrontmatterSchema,
-} from "../../src/modules/articles/article-schema";
+import { articleFrontmatterSchema } from "../../src/modules/articles/article-schema";
 import { fireflyPostsType, fireflySite } from "../../src/sites/firefly";
 import { assertValidSiteConfig } from "../../src/sites/schema";
 import { toArticlePathConfig } from "../../src/sites/types";
 
 /**
- * Phase 1a 的过渡护栏。
+ * Firefly 站点配置的护栏。
  *
- * 这一阶段字段清单暂时存在两份：`src/sites/firefly.ts`（新的单一来源）与
- * `article-schema.ts` 里手写的 schema（尚未做类型改造，见该文件注释）。
- * 本测试逐项核对两者，确保过渡期间不可能静默漂移。Phase 1b 删除手写 schema 后，
- * 可以只保留「站点配置自身合法」那部分。
+ * Phase 1a 时期这里逐项比对「站点配置」与「article-schema.ts 里手写的 schema」两份定义。
+ * 手写定义已在 Phase 1b-1 删除，字段唯一来源变成 `src/sites/firefly.ts`，因此改为核对
+ * 「派生出的 Front-matter schema 确实由站点声明的字段驱动」：站点配置增删或改名时这里会失败，
+ * 而不是让 schema 与站点配置静默漂移。
  */
 
 const minimalValidInput = {
@@ -27,39 +24,40 @@ describe("Firefly 站点配置", () => {
 		expect(() => assertValidSiteConfig(fireflySite)).not.toThrow();
 	});
 
-	it("字段清单与手写 schema 完全一致", () => {
-		const declaredKeys = fireflyPostsType.fields.map((field) => field.key).sort();
-		const schemaKeys = Object.keys(articleFrontmatterSchema.shape).sort();
-		expect(declaredKeys).toEqual(schemaKeys);
+	it("派生 Front-matter schema 的键集合等于站点声明的字段", () => {
+		// 用「所有字段都提供」的输入核对，否则可选字段（updated）会因缺席而不出现在结果里，
+		// 无法区分「schema 没声明该字段」与「字段可选且本次未提供」。
+		const parsed = articleFrontmatterSchema.parse({
+			...minimalValidInput,
+			updated: "2024-01-02T00:00:00.000Z",
+		}) as unknown as Record<string, unknown>;
+		expect(Object.keys(parsed).sort()).toEqual(
+			fireflyPostsType.fields.map((field) => field.key).sort(),
+		);
 	});
 
-	it("默认值与手写 schema 一致", () => {
-		const declared = buildArticleFrontmatterSchema(fireflyPostsType).parse(minimalValidInput);
-		const handwritten = articleFrontmatterSchema.parse(minimalValidInput);
-		expect(declared).toEqual(handwritten);
-	});
-
-	it("两者都拒绝未知字段", () => {
-		const withUnknownField = { ...minimalValidInput, prevTitle: "构建注入字段" };
-		expect(() => articleFrontmatterSchema.parse(withUnknownField)).toThrow();
-		expect(() => buildArticleFrontmatterSchema(fireflyPostsType).parse(withUnknownField)).toThrow();
-	});
-
-	it("两者对同一非法输入给出同样的拒绝结果", () => {
-		const invalidCases = [
-			{ ...minimalValidInput, title: "" },
-			{ ...minimalValidInput, sourceLink: "http://insecure.example.com" },
-			{ ...minimalValidInput, image: "data:image/png;base64,AAAA" },
-			{ ...minimalValidInput, published: "not-a-date" },
-			{ ...minimalValidInput, tags: ["ok", ""] },
-		];
-		for (const invalidInput of invalidCases) {
-			const declaredRejected =
-				!buildArticleFrontmatterSchema(fireflyPostsType).safeParse(invalidInput).success;
-			const handwrittenRejected = !articleFrontmatterSchema.safeParse(invalidInput).success;
-			expect(declaredRejected, JSON.stringify(invalidInput)).toBe(true);
-			expect(handwrittenRejected, JSON.stringify(invalidInput)).toBe(true);
+	it("派生 Front-matter schema 应用站点声明的默认值", () => {
+		const parsed = articleFrontmatterSchema.parse(minimalValidInput) as unknown as Record<
+			string,
+			unknown
+		>;
+		let checked = 0;
+		for (const field of fireflyPostsType.fields) {
+			const resolved = field.validation.safeParse(undefined);
+			// 只核对声明了默认值的字段。必填字段（title / published）没有默认值，
+			// 可选字段（updated）的「缺省」语义是字段缺席而非某个默认值，都不参与比对。
+			if (!resolved.success || resolved.data === undefined) continue;
+			expect(parsed[field.key], field.key).toEqual(resolved.data);
+			checked += 1;
 		}
+		// 防止循环静默空转：Firefly 确实有一批带默认值的字段。
+		expect(checked).toBeGreaterThan(0);
+	});
+
+	it("拒绝未知字段，避免静默剥离构建内部数据", () => {
+		expect(() =>
+			articleFrontmatterSchema.parse({ ...minimalValidInput, prevTitle: "构建注入字段" }),
+		).toThrow();
 	});
 
 	it("站点路径配置能构造出 Firefly 的 Page Bundle 路径", () => {

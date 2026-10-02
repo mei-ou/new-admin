@@ -1,8 +1,9 @@
 import { z } from "zod";
-import { requiredText, safeHttpsUrl, safeText } from "../../sites/field-validators";
+import { safeText } from "../../sites/field-validators";
 import { fireflyPostsType } from "../../sites/firefly";
 import type { ContentTypeConfig } from "../../sites/types";
-import { safeCoverReference } from "./article-field-validators";
+import { getFieldKeys } from "../../sites/types";
+import type { ArticleEditorInput, ArticleFrontmatter } from "../../types/article";
 
 /**
  * 按内容类型构建可写 Frontmatter Schema。
@@ -44,58 +45,40 @@ export function buildArticleEditorInputSchema(contentType: ContentTypeConfig) {
 }
 
 /**
- * 与 Firefly Content Collection 对齐的可写 Frontmatter Schema。
+ * 当前生效内容类型的 Front-matter 键集合。
  *
- * 这是 **Phase 1a 的过渡形态**：字段清单暂时手写在这里，与 `src/sites/firefly.ts` 的声明
- * 并存。之所以不立刻改为由站点配置派生，是因为派生会把 schema 的输出类型退化成
- * `Record<string, unknown>`，牵连 `frontmatter-utils` 与编辑器表单的整套类型改造——那属于
- * Phase 1b 的范围，与「按类型渲染表头」是同一件事。
+ * `frontmatter-utils` 用它区分「已知字段」与「编辑器要原样保留的未知字段」。键集合与
+ * 字段校验同源（都来自站点配置），因此不会出现「schema 认某个键、键集合不认」的错位。
  *
- * 两份定义不会静默漂移：`tests/sites/firefly-config.test.ts` 会逐项核对字段键、默认值与
- * 接受/拒绝行为。Phase 1b 完成类型改造后，这份手写 schema 将被删除。
+ * 过渡形态说明：内容类型参数化尚未贯穿到全部调用点，所以这里先固定按 Firefly 内容类型
+ * 派生。Phase 1b 完成内容类型贯穿后，该集合改由调用方按 `contentType` 传入，这个常量即可删除。
  */
-export const articleFrontmatterSchema = z
-	.object({
-		title: requiredText(200),
-		published: z.coerce.date(),
-		updated: z.coerce.date().optional(),
-		draft: z.boolean().default(true),
-		description: safeText(500).default(""),
-		image: safeCoverReference(2_048).default(""),
-		tags: z.array(requiredText(50)).max(30).default([]),
-		category: requiredText(100).nullable().default(null),
-		lang: requiredText(20).default("zh_CN"),
-		pinned: z.boolean().default(false),
-		author: safeText(100).default(""),
-		sourceLink: safeHttpsUrl(2_048).default(""),
-		licenseName: safeText(100).default(""),
-		licenseUrl: safeHttpsUrl(2_048).default(""),
-		comment: z.boolean().default(true),
-		password: safeText(200).default(""),
-		passwordHint: safeText(200).default(""),
-	})
-	.strict();
+export const ARTICLE_FRONTMATTER_KEYS: ReadonlySet<string> = getFieldKeys(fireflyPostsType);
 
 /**
- * P1 编辑输入只接受 Markdown。format 是字面量而非任意扩展名，防止客户端借此
- * 写入 MDX 或其他可影响构建执行面的文件类型。
+ * Firefly 内容类型的可写 Front-matter Schema（唯一来源：`src/sites/firefly.ts`）。
+ *
+ * 这里不再重复声明字段清单：新增或修改字段只需改站点配置一处，不存在两份定义漂移的可能。
+ *
+ * 显式标注 `z.ZodType<ArticleFrontmatter>` 是**刻意的类型投影**。按站点配置动态组装的
+ * Zod object 只能推出 `Record<string, unknown>`；若任由它退化，`read-article`、
+ * `list-articles`、编辑器表单等消费点会立刻失去字段类型（已用 TS 探针确认：索引签名
+ * 类型不可赋给具名接口）。投影把 Firefly 构建真实读取的字段形状重新贴回来，而等价性
+ * 由运行时测试逐项核对：`tests/modules/article-schema.test.ts` 覆盖默认值、必填、
+ * 未知字段拒绝、标签上限、控制字符与 URL 安全，`tests/sites/firefly-config.test.ts`
+ * 核对「派生结果由站点声明的字段驱动」。
  */
-export const articleEditorInputSchema = z
-	.object({
-		frontmatter: articleFrontmatterSchema,
-		slug: safeText(100).optional(),
-		format: z.literal("md").default("md"),
-		markdown: z.string().max(1_000_000),
-	})
-	.strict();
+export const articleFrontmatterSchema: z.ZodType<ArticleFrontmatter> =
+	buildArticleFrontmatterSchema(fireflyPostsType) as unknown as z.ZodType<ArticleFrontmatter>;
 
-export type ValidatedArticleFrontmatter = z.infer<typeof articleFrontmatterSchema>;
-export type ValidatedArticleEditorInput = z.infer<typeof articleEditorInputSchema>;
+/** 编辑输入边界。与 Front-matter 同源派生，避免信封字段出现第二份定义。 */
+export const articleEditorInputSchema: z.ZodType<ArticleEditorInput> =
+	buildArticleEditorInputSchema(fireflyPostsType) as unknown as z.ZodType<ArticleEditorInput>;
+
+export type ValidatedArticleFrontmatter = ArticleFrontmatter;
+export type ValidatedArticleEditorInput = ArticleEditorInput;
 
 /** 在所有默认值与边界校验通过后，才允许文章数据进入路径和 Provider 层。 */
 export function parseArticleEditorInput(input: unknown): ValidatedArticleEditorInput {
 	return articleEditorInputSchema.parse(input);
 }
-
-/** Phase 1b 将用它替换上面的手写 schema：内容类型贯穿到文章服务之后即可删除过渡定义。 */
-export const fireflyFrontmatterSchema = buildArticleFrontmatterSchema(fireflyPostsType);
