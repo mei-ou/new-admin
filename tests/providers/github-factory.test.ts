@@ -4,6 +4,7 @@ import { GitHubProvider } from "../../src/providers/git/github-provider";
 import { initializeProvider } from "../../src/providers/registry";
 
 const validEnv = {
+	SITE_ID: "firefly",
 	GITHUB_OWNER: "firefly-owner",
 	GITHUB_REPO: "firefly-blog",
 	GITHUB_BRANCH: "master",

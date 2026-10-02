@@ -11,6 +11,7 @@ const FILE_SHA = "a".repeat(40);
 const contentRoot = "src/content/posts";
 const principal = { sub: "subject-1", email: "admin@example.com" };
 const validEnv: RuntimeEnv = {
+	SITE_ID: "firefly",
 	GITHUB_OWNER: "firefly-owner",
 	GITHUB_REPO: "firefly-blog",
 	GITHUB_BRANCH: "master",

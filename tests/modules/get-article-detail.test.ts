@@ -12,6 +12,7 @@ const HEAD_SHA = "b".repeat(40);
 const TREE_SHA = "c".repeat(40);
 const repositoryPath = "src/content/posts/hello-world/index.md";
 const validEnv: RuntimeEnv = {
+	SITE_ID: "firefly",
 	GITHUB_OWNER: "firefly-owner",
 	GITHUB_REPO: "firefly-blog",
 	GITHUB_BRANCH: "master",
