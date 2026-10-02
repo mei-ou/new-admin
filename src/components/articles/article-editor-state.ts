@@ -1,4 +1,12 @@
 import { z } from "zod";
+import {
+	readFrontmatterBoolean,
+	readFrontmatterDate,
+	readFrontmatterNullableText,
+	readFrontmatterText,
+	readFrontmatterTextArray,
+	requireFrontmatterDate,
+} from "../../modules/articles/frontmatter-readers";
 import type { ParsedMarkdownDocument } from "../../utils/frontmatter-utils";
 import { createSlugFromTitle } from "../../utils/slug-utils";
 
@@ -261,28 +269,29 @@ export function formFromImportedMarkdown(
 	currentForm: ArticleEditorForm,
 	document: ParsedMarkdownDocument,
 ): ArticleEditorForm {
+	// 导入文档的 Front-matter 走记录类型，逐字段显式收窄；缺失时用与站点配置一致的兜底值。
+	const frontmatter = document.frontmatter;
+	const updated = readFrontmatterDate(frontmatter, "updated");
 	return {
 		storageSlug: currentForm.storageSlug,
 		publicSlug: document.slug ?? "",
-		title: document.frontmatter.title,
-		published: toDatetimeLocal(document.frontmatter.published.toISOString()),
-		updated: document.frontmatter.updated
-			? toDatetimeLocal(document.frontmatter.updated.toISOString())
-			: "",
-		draft: document.frontmatter.draft,
-		description: document.frontmatter.description,
-		image: document.frontmatter.image,
-		tags: document.frontmatter.tags.join(", "),
-		category: document.frontmatter.category ?? "",
-		lang: document.frontmatter.lang,
-		pinned: document.frontmatter.pinned,
-		author: document.frontmatter.author,
-		sourceLink: document.frontmatter.sourceLink,
-		licenseName: document.frontmatter.licenseName,
-		licenseUrl: document.frontmatter.licenseUrl,
-		comment: document.frontmatter.comment,
-		password: document.frontmatter.password,
-		passwordHint: document.frontmatter.passwordHint,
+		title: readFrontmatterText(frontmatter, "title"),
+		published: toDatetimeLocal(requireFrontmatterDate(frontmatter, "published").toISOString()),
+		updated: updated === undefined ? "" : toDatetimeLocal(updated.toISOString()),
+		draft: readFrontmatterBoolean(frontmatter, "draft", true),
+		description: readFrontmatterText(frontmatter, "description"),
+		image: readFrontmatterText(frontmatter, "image"),
+		tags: readFrontmatterTextArray(frontmatter, "tags").join(", "),
+		category: readFrontmatterNullableText(frontmatter, "category") ?? "",
+		lang: readFrontmatterText(frontmatter, "lang"),
+		pinned: readFrontmatterBoolean(frontmatter, "pinned", false),
+		author: readFrontmatterText(frontmatter, "author"),
+		sourceLink: readFrontmatterText(frontmatter, "sourceLink"),
+		licenseName: readFrontmatterText(frontmatter, "licenseName"),
+		licenseUrl: readFrontmatterText(frontmatter, "licenseUrl"),
+		comment: readFrontmatterBoolean(frontmatter, "comment", true),
+		password: readFrontmatterText(frontmatter, "password"),
+		passwordHint: readFrontmatterText(frontmatter, "passwordHint"),
 		markdown: document.markdown,
 	};
 }

@@ -61,14 +61,13 @@ export interface FrontmatterCodec {
 /**
  * 由内容类型派生 codec。
  *
- * `schema` 处是**刻意的类型投影**：按站点配置动态组装的 Zod object 只能推出
- * `Record<string, unknown>`，而现有消费点依赖具名字段形状（已用 TS 探针确认：索引签名
- * 类型不可赋给具名接口）。投影把字段形状贴回来，等价性由运行时测试逐项核对。
- * Phase 1b-1c 把 `ArticleFrontmatter` 记录化之后，这个断言即可移除。
+ * 这里不再需要类型投影：`ArticleFrontmatter` 已是记录类型（`Readonly<Record<string, unknown>>`），
+ * 动态组装的 Zod object 的输出形状与它天然兼容。此前必须投影，是因为当时
+ * `ArticleFrontmatter` 是固定 17 字段的具名接口，而索引签名类型不可赋给具名接口。
  */
 export function createFrontmatterCodec(contentType: ContentTypeConfig): FrontmatterCodec {
 	return {
-		schema: buildArticleFrontmatterSchema(contentType) as unknown as z.ZodType<ArticleFrontmatter>,
+		schema: buildArticleFrontmatterSchema(contentType),
 		knownKeys: getFieldKeys(contentType),
 	};
 }
@@ -91,7 +90,13 @@ export const fireflyFrontmatterCodec: FrontmatterCodec = createFrontmatterCodec(
 export const articleFrontmatterSchema: z.ZodType<ArticleFrontmatter> =
 	fireflyFrontmatterCodec.schema;
 
-/** 编辑输入边界。与 Front-matter 同源派生，避免信封字段出现第二份定义。 */
+/**
+ * 编辑输入边界。与 Front-matter 同源派生，避免信封字段出现第二份定义。
+ *
+ * 这里保留类型断言，但它**不是** Front-matter 形状的投影（那类投影已随 `ArticleFrontmatter`
+ * 记录化一并移除）。原因只在信封字段：`exactOptionalPropertyTypes` 下 Zod 的 `.optional()`
+ * 产出 `slug: string | undefined`，而 `ArticleEditorInput.slug?: string` 不允许显式 `undefined`。
+ */
 export const articleEditorInputSchema: z.ZodType<ArticleEditorInput> =
 	buildArticleEditorInputSchema(fireflyPostsType) as unknown as z.ZodType<ArticleEditorInput>;
 

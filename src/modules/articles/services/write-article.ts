@@ -13,6 +13,7 @@ import { parseSlug } from "../../../utils/slug-utils";
 import type { LoadedArticleAsset } from "../../media/services/load-staged-article-assets";
 import type { ArticleResourceChange } from "../article-resource-changes";
 import { fireflyFrontmatterCodec, parseArticleEditorInput } from "../article-schema";
+import { readFrontmatterText } from "../frontmatter-readers";
 
 const GIT_OBJECT_SHA = /^[a-f0-9]{40,64}$/;
 
@@ -38,7 +39,12 @@ function createWriteContext(
 		article.markdown,
 		article.slug,
 	);
-	return { storageSlug, path, content, coverReference: article.frontmatter.image };
+	return {
+		storageSlug,
+		path,
+		content,
+		coverReference: readFrontmatterText(article.frontmatter, "image"),
+	};
 }
 
 function parseExpectedSha(input: unknown): string {

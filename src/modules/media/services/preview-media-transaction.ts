@@ -13,6 +13,7 @@ import type {
 } from "../../../providers/git/types";
 import { parseMarkdownDocument } from "../../../utils/frontmatter-utils";
 import { fireflyFrontmatterCodec } from "../../articles/article-schema";
+import { readFrontmatterText } from "../../articles/frontmatter-readers";
 import type { ArticleAssetReference } from "../article-asset";
 import { ARTICLE_ASSET_MAX_COUNT, ARTICLE_ASSET_TOTAL_MAX_BYTES } from "../media-config";
 import {
@@ -144,7 +145,7 @@ async function readBundle(
 	if (enforceMoveSafety) validateResourceBudget(resourceEntries);
 	const summarized = summarizeArticleAssets({
 		storageSlug,
-		frontmatterImage: parsedArticle.frontmatter.image,
+		frontmatterImage: readFrontmatterText(parsedArticle.frontmatter, "image"),
 		markdown: parsedArticle.markdown,
 		entries: resourceEntries,
 		pathConfig: dependencies.pathConfig,

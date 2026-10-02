@@ -4,28 +4,21 @@ import type { ArticleAssetReferenceAnalysisSummary } from "../modules/media/serv
 export type ArticleFormat = "md";
 
 /**
- * Firefly 构建时真正读取的文章 Frontmatter。
- * prev/next 导航字段由主站构建流程计算，不属于后台可写数据，因此不出现在该类型中。
+ * 文章 Front-matter：按内容类型驱动的记录类型。
+ *
+ * **字段清单的唯一来源是站点配置**（`src/sites/<site>.ts`），所以这里刻意不再声明
+ * Firefly 的 17 个具名字段——那个接口每加一个内容类型就是错的，而本文件本该站点无关。
+ *
+ * 代价是「字段一定存在、类型一定正确」不再由类型系统保证。需要具名值的地方一律走
+ * `src/modules/articles/frontmatter-readers.ts` 的读取辅助：它们在读取时收窄类型，
+ * 把「缺失 / 类型不符」当作不可信输入处理。**不要在这里用 `as` 把值断言成具体类型**——
+ * Front-matter 来自仓库，属于外部数据。
+ *
+ * 值域刻意留成 `unknown` 而不是收窄成标量联合：站点配置允许 `arrayOfObject` 与 `json`
+ * 降级字段（如 tsh520 的 `life.meals` / `ziyuan`），任何标量联合都覆盖不全，
+ * 收窄只会制造「类型说安全、运行时不是」的假象。
  */
-export interface ArticleFrontmatter {
-	title: string;
-	published: Date;
-	updated?: Date;
-	draft: boolean;
-	description: string;
-	image: string;
-	tags: string[];
-	category: string | null;
-	lang: string;
-	pinned: boolean;
-	author: string;
-	sourceLink: string;
-	licenseName: string;
-	licenseUrl: string;
-	comment: boolean;
-	password: string;
-	passwordHint: string;
-}
+export type ArticleFrontmatter = Readonly<Record<string, unknown>>;
 
 /**
  * 编辑器提交到业务层的文章数据。slug 与 Frontmatter 分离，以便服务端独立执行

@@ -3,6 +3,11 @@ import { buildExpectedArticleUrl } from "../../../core/config/article-url";
 import type { ArticlePathConfig } from "../../../core/security/path-policy";
 import type { GitProvider } from "../../../providers/git/types";
 import { parseSlug } from "../../../utils/slug-utils";
+import {
+	readFrontmatterNullableText,
+	readFrontmatterText,
+	readFrontmatterTextArray,
+} from "../frontmatter-readers";
 import { type ArticleHeadingTarget, extractArticleHeadings } from "./extract-article-headings";
 import {
 	ARTICLE_LIST_MAX_PAGE_SIZE,
@@ -89,11 +94,11 @@ export async function listArticleLinkTargets(
 					return {
 						storageSlug: article.storageSlug,
 						slug,
-						title: article.frontmatter.title,
+						title: readFrontmatterText(article.frontmatter, "title"),
 						href: buildArticleHref(dependencies.articleUrlTemplate, slug),
-						description: article.frontmatter.description,
-						category: article.frontmatter.category,
-						tags: article.frontmatter.tags,
+						description: readFrontmatterText(article.frontmatter, "description"),
+						category: readFrontmatterNullableText(article.frontmatter, "category"),
+						tags: readFrontmatterTextArray(article.frontmatter, "tags"),
 						headings: extractArticleHeadings(article.markdown),
 					};
 				} catch {

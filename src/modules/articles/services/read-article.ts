@@ -10,6 +10,7 @@ import { parseMarkdownDocument } from "../../../utils/frontmatter-utils";
 import { parseSlug } from "../../../utils/slug-utils";
 import { summarizeArticleAssets } from "../../media/services/summarize-article-assets";
 import { fireflyFrontmatterCodec } from "../article-schema";
+import { readFrontmatterText } from "../frontmatter-readers";
 
 export interface ReadArticleDependencies {
 	gitProvider: Pick<GitProvider, "getFile"> &
@@ -72,7 +73,7 @@ export async function readArticle(
 			? undefined
 			: summarizeArticleAssets({
 					storageSlug,
-					frontmatterImage: parsed.frontmatter.image,
+					frontmatterImage: readFrontmatterText(parsed.frontmatter, "image"),
 					markdown: parsed.markdown,
 					entries: snapshotEntries,
 					pathConfig,

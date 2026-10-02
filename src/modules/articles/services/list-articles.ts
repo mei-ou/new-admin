@@ -7,6 +7,14 @@ import {
 import type { GitProvider } from "../../../providers/git/types";
 import type { ArticleListResult, ArticleSummary, RemoteArticle } from "../../../types/article";
 import { parseSlug } from "../../../utils/slug-utils";
+import {
+	readFrontmatterBoolean,
+	readFrontmatterDate,
+	readFrontmatterNullableText,
+	readFrontmatterText,
+	readFrontmatterTextArray,
+	requireFrontmatterDate,
+} from "../frontmatter-readers";
 import { readArticle } from "./read-article";
 
 export const ARTICLE_LIST_MAX_SCAN = 100;
@@ -56,18 +64,20 @@ function parseBoundedInteger(value: number | undefined, fallback: number, maximu
 }
 
 function toSummary(article: RemoteArticle): ArticleSummary {
-	const { updated } = article.frontmatter;
+	const updated = readFrontmatterDate(article.frontmatter, "updated");
 	return {
 		storageSlug: article.storageSlug,
 		...(article.slug === undefined ? {} : { slug: article.slug }),
-		title: article.frontmatter.title,
-		published: article.frontmatter.published,
+		title: readFrontmatterText(article.frontmatter, "title"),
+		// 发布日期是列表排序依据，读不到说明数据异常，直接抛错而不是让 Invalid Date 传播。
+		published: requireFrontmatterDate(article.frontmatter, "published"),
 		...(updated === undefined ? {} : { updated }),
-		draft: article.frontmatter.draft,
-		description: article.frontmatter.description,
-		tags: article.frontmatter.tags,
-		category: article.frontmatter.category,
-		pinned: article.frontmatter.pinned,
+		// 读不到 draft 时按「草稿」处理：宁可保守，也不要误标为已发布。
+		draft: readFrontmatterBoolean(article.frontmatter, "draft", true),
+		description: readFrontmatterText(article.frontmatter, "description"),
+		tags: readFrontmatterTextArray(article.frontmatter, "tags"),
+		category: readFrontmatterNullableText(article.frontmatter, "category"),
+		pinned: readFrontmatterBoolean(article.frontmatter, "pinned", false),
 	};
 }
 

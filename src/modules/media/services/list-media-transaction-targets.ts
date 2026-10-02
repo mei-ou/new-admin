@@ -4,6 +4,7 @@ import type { GitDirectoryEntry, GitProvider } from "../../../providers/git/type
 import { parseMarkdownDocument } from "../../../utils/frontmatter-utils";
 import { parseSlug } from "../../../utils/slug-utils";
 import { fireflyFrontmatterCodec } from "../../articles/article-schema";
+import { readFrontmatterText } from "../../articles/frontmatter-readers";
 import {
 	MEDIA_TRANSACTION_ARTICLE_MAX_COUNT,
 	MEDIA_TRANSACTION_ARTICLE_READ_CONCURRENCY,
@@ -96,7 +97,7 @@ async function readSnapshotArticle(
 	return {
 		storageSlug,
 		articleSha: file.sha,
-		title: parsed.frontmatter.title,
+		title: readFrontmatterText(parsed.frontmatter, "title"),
 		textBytes: new TextEncoder().encode(file.content).byteLength,
 	};
 }
