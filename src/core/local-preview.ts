@@ -410,6 +410,18 @@ export async function handleLocalPreviewApiRequest(
 	capabilities: AdminCapabilitySnapshot,
 ): Promise<Response | null> {
 	const url = new URL(request.url);
+	if (url.pathname === "/api/images/upload" && request.method === "POST") {
+		if (!capabilities.imageBedUpload) return disabledCapabilityResponse();
+		return jsonResponse(
+			{
+				error: {
+					code: "CONFIGURATION_ERROR",
+					message: "本地预览不会上传真实图床。请在受认证保护的测试部署联调。",
+				},
+			},
+			503,
+		);
+	}
 	if (url.pathname === "/api/media/staging" && request.method === "POST") {
 		if (!capabilities.smallImageUpload && !capabilities.pdfAttachmentUpload) {
 			return disabledCapabilityResponse();

@@ -8,6 +8,34 @@ import {
 } from "../../src/core/http/security-headers";
 
 describe("统一 HTTP 响应", () => {
+	it("HTML 仅放行配置的图床图片来源并保留脚本 Hash", async () => {
+		const response = await applyDocumentSecurityHeaders(
+			new Response("<script>window.ready = true;</script>", {
+				headers: { "Content-Type": "text/html" },
+			}),
+			"https://pic.example.com",
+		);
+		const csp = response.headers.get("Content-Security-Policy") ?? "";
+		expect(csp).toContain("img-src 'self' data: blob: https://pic.example.com");
+		expect(csp).toContain("'sha256-");
+		expect(csp).toContain("connect-src 'self'");
+		expect(csp).not.toContain("img-src *");
+	});
+
+	it.each([
+		"http://pic.example.com",
+		"https://user:pass@pic.example.com",
+		"https://evil.example;img-src",
+		"not-a-url",
+	])("不把非法图床配置写进 CSP %s", async (origin) => {
+		const response = await applyDocumentSecurityHeaders(
+			new Response("<html></html>", { headers: { "Content-Type": "text/html" } }),
+			origin,
+		);
+		expect(response.headers.get("Content-Security-Policy")).toBe(
+			securityHeaders["Content-Security-Policy"],
+		);
+	});
 	it("JSON 响应禁止缓存", async () => {
 		const response = jsonResponse({ ok: true });
 		expect(response.headers.get("Cache-Control")).toBe("no-store");

@@ -31,6 +31,20 @@ function createWriteRequest(url: string, method: "POST" | "PUT", body: unknown):
 }
 
 describe("仅开发环境本地预览", () => {
+	it("图床上传在本地预览中被明确拦截，不交给真实路由", async () => {
+		const request = new Request("http://localhost:4321/api/images/upload", { method: "POST" });
+		const disabled = await handleLocalPreviewApiRequestWithCapabilities(
+			request,
+			previewCapabilities,
+		);
+		expect(disabled?.status).toBe(404);
+		const enabled = await handleLocalPreviewApiRequestWithCapabilities(
+			request,
+			resolveAdminCapabilities({ FEATURE_IMAGEBED_UPLOAD: "true" }),
+		);
+		expect(enabled?.status).toBe(503);
+		expect(await enabled?.json()).toMatchObject({ error: { code: "CONFIGURATION_ERROR" } });
+	});
 	it("只允许显式 development HTTP loopback 且拒绝 Cloudflare 边缘请求", () => {
 		expect(isLocalPreviewRequest(new Request("http://localhost:4321/articles"), previewEnv)).toBe(
 			true,

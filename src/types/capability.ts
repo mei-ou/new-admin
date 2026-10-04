@@ -2,6 +2,7 @@ export const adminCapabilityKeys = [
 	"articleLinks",
 	"externalHttpsLinks",
 	"smallImageUpload",
+	"imageBedUpload",
 	"coverManagement",
 	"articleDelete",
 	"pdfAttachmentUpload",

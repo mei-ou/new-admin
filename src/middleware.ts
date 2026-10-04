@@ -31,6 +31,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
 				env,
 				"FEATURE_SMALL_IMAGE_UPLOAD",
 			) as unknown as string,
+			FEATURE_IMAGEBED_UPLOAD: Reflect.get(env, "FEATURE_IMAGEBED_UPLOAD") as unknown as string,
 			FEATURE_COVER_MANAGEMENT: Reflect.get(env, "FEATURE_COVER_MANAGEMENT") as unknown as string,
 			FEATURE_ARTICLE_DELETE: Reflect.get(env, "FEATURE_ARTICLE_DELETE") as unknown as string,
 			FEATURE_PDF_ATTACHMENT_UPLOAD: Reflect.get(
@@ -63,7 +64,8 @@ export const onRequest = defineMiddleware(async (context, next) => {
 				// Astro 6+ 通过 cloudflare:workers 暴露绑定；不再使用已移除的 locals.runtime.env。
 				const config = loadRuntimeConfig(env);
 				const writePolicy =
-					context.request.method === "POST" && context.url.pathname === "/api/media/staging"
+					context.request.method === "POST" &&
+					["/api/media/staging", "/api/images/upload"].includes(context.url.pathname)
 						? { contentTypes: ["multipart/form-data"] as const }
 						: undefined;
 				enforceWriteRequestPolicy(context.request, config.ADMIN_ORIGIN, writePolicy);
@@ -76,7 +78,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
 		const response = await next();
 		response.headers.set("X-Request-Id", requestId);
-		return applyDocumentSecurityHeaders(response);
+		return applyDocumentSecurityHeaders(response, Reflect.get(env, "IMAGEBED_BASE_URL"));
 	} catch (error) {
 		const normalized = normalizeError(error);
 		writeAuditEvent({

@@ -72,19 +72,48 @@ async function createInlineScriptHashes(html: string): Promise<string[]> {
  * 但放宽为 `unsafe-inline` 会扩大 XSS 面；因此仅对当前 HTML 中精确匹配的脚本生成 CSP Hash。
  * 外部脚本仍只能同源，脚本内容变化后旧 Hash 自动失效，production 与本地开发使用同一边界。
  */
-export async function applyDocumentSecurityHeaders(response: Response): Promise<Response> {
+export async function applyDocumentSecurityHeaders(
+	response: Response,
+	imageBedOrigin?: unknown,
+): Promise<Response> {
 	const contentType = response.headers.get("Content-Type")?.toLowerCase() ?? "";
 	if (!contentType.startsWith("text/html")) return applySecurityHeaders(response);
 
 	const html = await response.text();
 	const headers = new Headers(response.headers);
 	applyBaseSecurityHeaders(headers);
+	if (typeof imageBedOrigin === "string") {
+		try {
+			const origin = new URL(imageBedOrigin);
+			if (
+				origin.protocol === "https:" &&
+				!origin.port &&
+				/^([a-z0-9-]+\.)+[a-z]{2,}$/i.test(origin.hostname) &&
+				!origin.hostname.endsWith(".localhost") &&
+				!origin.hostname.endsWith(".local") &&
+				!origin.username &&
+				!origin.password &&
+				origin.pathname === "/" &&
+				!origin.search &&
+				!origin.hash
+			) {
+				headers.set(
+					"Content-Security-Policy",
+					securityHeaders["Content-Security-Policy"].replace(
+						"img-src 'self' data:",
+						`img-src 'self' data: blob: ${origin.origin}`,
+					),
+				);
+			}
+		} catch {
+			headers.set("Content-Security-Policy", securityHeaders["Content-Security-Policy"]);
+		}
+	}
 	const hashes = await createInlineScriptHashes(html);
 	if (hashes.length > 0) {
-		const csp = securityHeaders["Content-Security-Policy"].replace(
-			"script-src 'self'",
-			`script-src 'self' ${hashes.join(" ")}`,
-		);
+		const csp = (
+			headers.get("Content-Security-Policy") ?? securityHeaders["Content-Security-Policy"]
+		).replace("script-src 'self'", `script-src 'self' ${hashes.join(" ")}`);
 		headers.set("Content-Security-Policy", csp);
 	}
 	return createResponseWithHeaders(response, headers, html);

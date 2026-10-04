@@ -19,6 +19,22 @@ function createWriteRequest(overrides: Record<string, string> = {}): Request {
 }
 
 describe("写请求来源策略", () => {
+	it("图床上传仍要求同源、自定义头和 multipart 表单", () => {
+		const body = new FormData();
+		body.set("file", new File(["image"], "image.png", { type: "image/png" }));
+		const request = new Request(`${origin}/api/images/upload`, {
+			method: "POST",
+			body,
+			headers: { Origin: origin, "Sec-Fetch-Site": "same-origin", "X-Firefly-Admin": "1" },
+		});
+		expect(() =>
+			enforceWriteRequestPolicy(request, origin, { contentTypes: ["multipart/form-data"] }),
+		).not.toThrow();
+		request.headers.set("Origin", "https://evil.example");
+		expect(() =>
+			enforceWriteRequestPolicy(request, origin, { contentTypes: ["multipart/form-data"] }),
+		).toThrow(ApiError);
+	});
 	it("识别所有有副作用的方法", () => {
 		expect(["POST", "put", "Patch", "DELETE"].every(isWriteMethod)).toBe(true);
 		expect(isWriteMethod("GET")).toBe(false);

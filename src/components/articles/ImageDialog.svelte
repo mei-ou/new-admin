@@ -1,5 +1,6 @@
 <script lang="ts">
 import { onDestroy } from "svelte";
+import { IMAGEBED_IMAGE_MAX_BYTES } from "../../modules/media/imagebed-config";
 import {
 	ARTICLE_ASSET_ATTACHMENT_MAX_BYTES,
 	ARTICLE_ASSET_IMAGE_MAX_BYTES,
@@ -9,6 +10,7 @@ import {
 } from "../../modules/media/media-config";
 import type { AdminCapabilitySnapshot } from "../../types/capability";
 import { createMarkdownImage } from "./editor-commands";
+import { uploadImageBedImage } from "./imagebed-client";
 import { parseArticleRelativeImagePath, parseRemoteImageUrl } from "./markdown-target-validation";
 import {
 	createLocalMediaKey,
@@ -22,7 +24,7 @@ import { isR2StagingUnavailable, type StagedMediaAsset, stageMediaAsset } from "
 import RepositoryBrowser from "./RepositoryBrowser.svelte";
 import type { RepositoryEntry } from "./repository-directory";
 
-type ImageSource = "attachment" | "upload" | "repository" | "remote";
+type ImageSource = "attachment" | "upload" | "repository" | "remote" | "imagebed";
 
 interface Props {
 	open: boolean;
@@ -45,15 +47,15 @@ let {
 	oninsert,
 	onstaged = () => undefined,
 }: Props = $props();
-let source = $state<ImageSource>(
-	capabilities.externalHttpsLinks
-		? "remote"
-		: capabilities.smallImageUpload
-			? "upload"
-			: capabilities.pdfAttachmentUpload
-				? "attachment"
-				: "remote",
-);
+function getInitialImageSource(): ImageSource {
+	if (capabilities.imageBedUpload) return "imagebed";
+	if (capabilities.externalHttpsLinks) return "remote";
+	if (capabilities.smallImageUpload) return "upload";
+	if (capabilities.pdfAttachmentUpload) return "attachment";
+	return "remote";
+}
+
+let source = $state<ImageSource>(getInitialImageSource());
 let alt = $state("");
 let title = $state("");
 let remoteUrl = $state("");
@@ -126,11 +128,15 @@ async function selectUploadFile(event: Event): Promise<void> {
 	const isAttachment = source === "attachment";
 	const maxBytes = isAttachment
 		? ARTICLE_ASSET_ATTACHMENT_MAX_BYTES
-		: ARTICLE_ASSET_IMAGE_MAX_BYTES;
+		: source === "imagebed"
+			? IMAGEBED_IMAGE_MAX_BYTES
+			: ARTICLE_ASSET_IMAGE_MAX_BYTES;
 	if (uploadFile.size === 0 || uploadFile.size > maxBytes) {
 		errorMessage = isAttachment
 			? "附件必须非空且不能超过 4 MiB。"
-			: "图片必须非空且不能超过 1 MiB。";
+			: source === "imagebed"
+				? "图片必须非空且不能超过 5 MiB。"
+				: "图片必须非空且不能超过 1 MiB。";
 		uploadFile = null;
 		input.value = "";
 		return;
@@ -156,6 +162,29 @@ async function selectUploadFile(event: Event): Promise<void> {
 		return;
 	}
 	if (!isAttachment) uploadPreviewUrl = URL.createObjectURL(uploadFile);
+	if (source === "imagebed") await uploadToImageBed();
+}
+
+async function uploadToImageBed(): Promise<void> {
+	if (!uploadFile || uploading) return;
+	const file = uploadFile;
+	const sequence = ++uploadSequence;
+	const controller = new AbortController();
+	uploadController?.abort();
+	uploadController = controller;
+	uploading = true;
+	errorMessage = "";
+	try {
+		const url = await uploadImageBedImage(file, controller.signal);
+		if (sequence !== uploadSequence || controller.signal.aborted) return;
+		oninsert(createMarkdownImage({ alt: alt || file.name, src: url, title }));
+		close();
+	} catch (error) {
+		if (sequence !== uploadSequence || controller.signal.aborted) return;
+		errorMessage = error instanceof Error ? error.message : "图床上传失败，请重试。";
+	} finally {
+		if (sequence === uploadSequence) uploading = false;
+	}
 }
 
 function isAbortError(error: unknown): boolean {
@@ -205,6 +234,7 @@ async function restoreLocalUpload(key: string, attachment: boolean): Promise<voi
 
 function selectSource(nextSource: ImageSource): void {
 	if (
+		(nextSource === "imagebed" && !capabilities.imageBedUpload) ||
 		(nextSource === "remote" && !capabilities.externalHttpsLinks) ||
 		(nextSource === "upload" && !capabilities.smallImageUpload) ||
 		(nextSource === "attachment" && !capabilities.pdfAttachmentUpload) ||
@@ -387,6 +417,9 @@ onDestroy(() => {
 			</header>
 
 			<div class="source-tabs" role="tablist" aria-label="资源来源">
+				{#if capabilities.imageBedUpload}
+					<button class:active={source === "imagebed"} type="button" onclick={() => selectSource("imagebed")}>图床自动上传</button>
+				{/if}
 				{#if capabilities.smallImageUpload}
 					<button class:active={source === "upload"} type="button" onclick={() => selectSource("upload")}>上传图片</button>
 				{/if}
@@ -401,7 +434,17 @@ onDestroy(() => {
 				{/if}
 			</div>
 
-			{#if source === "upload" || source === "attachment"}
+			{#if source === "imagebed"}
+				<div class="upload-card">
+					<label class="file-picker">选择图片并自动插入
+						<input type="file" accept="image/jpeg,image/png,image/webp" disabled={uploading} onchange={selectUploadFile} />
+					</label>
+					<p>支持 JPEG、PNG、WebP，单张最大 5 MiB。上传成功后自动插入图床链接，无需复制地址。</p>
+					<p class="field-note">图片独立保存在图床，不参与 GitHub 资源提交；取消编辑或删除文章不会自动删除图床图片。</p>
+					{#if uploading}<p role="status">正在上传图床，请稍候…</p>{/if}
+					{#if uploadPreviewUrl}<div class="remote-preview"><img src={uploadPreviewUrl} alt="待上传图片" /></div>{/if}
+				</div>
+			{:else if source === "upload" || source === "attachment"}
 				<div class="upload-card">
 					<label class="file-picker">
 						选择{selectedAssetLabel}
@@ -463,7 +506,9 @@ onDestroy(() => {
 			{#if errorMessage}<p class="dialog-error" role="alert">{errorMessage}</p>{/if}
 			<footer>
 				<button class="secondary" type="button" onclick={close}>取消</button>
-				{#if source === "upload" || source === "attachment"}
+				{#if source === "imagebed"}
+					<button type="button" disabled={!uploadFile || uploading} onclick={uploadToImageBed}>{uploading ? "正在上传…" : "重新上传并插入"}</button>
+				{:else if source === "upload" || source === "attachment"}
 					<button type="button" disabled={!stagedAsset || uploading || savingStagedAsset} onclick={finishUploadedAsset}>
 						{savingStagedAsset
 							? source === "attachment"

@@ -41,6 +41,11 @@ export const ADMIN_CAPABILITY_DEFINITIONS = {
 		defaultEnabled: true,
 		envKey: "FEATURE_SMALL_IMAGE_UPLOAD",
 	},
+	imageBedUpload: {
+		releaseState: "available",
+		defaultEnabled: false,
+		envKey: "FEATURE_IMAGEBED_UPLOAD",
+	},
 	coverManagement: {
 		releaseState: "available",
 		defaultEnabled: true,

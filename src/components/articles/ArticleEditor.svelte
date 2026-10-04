@@ -7,6 +7,7 @@ import {
 	createMarkdownVideoSource,
 	type MarkdownVideoProvider,
 } from "../../modules/markdown-codec/video";
+import { validateImageBedFile } from "../../modules/media/imagebed-config";
 import {
 	ARTICLE_ASSET_MAX_COUNT,
 	type ArticleAssetRole,
@@ -67,6 +68,7 @@ import {
 	type InlineMarkdownCommand,
 } from "./editor-commands";
 import ImageDialog from "./ImageDialog.svelte";
+import { uploadImageBedImage } from "./imagebed-client";
 import LinkDialog from "./LinkDialog.svelte";
 import MarkdownPreview from "./MarkdownPreview.svelte";
 import {
@@ -111,6 +113,8 @@ let expectedSha = $state("");
 let expectedHeadSha = $state("");
 let loading = $state(mode === "edit");
 let saving = $state(false);
+let imageUploading = $state(false);
+let imageUploadController: AbortController | undefined;
 let deleting = $state(false);
 let errorMessage = $state("");
 let successMessage = $state("");
@@ -554,6 +558,7 @@ function insertPendingSpecialBlock(handle: CodeMirrorEditorHandle): void {
 }
 
 function openImageDialog(): void {
+	if (imageUploading) return;
 	savedDialogSelection = getEditorSelection();
 	imageDialogOpen = true;
 }
@@ -575,6 +580,121 @@ function insertDialogMarkdown(markdown: string): void {
 		markdown.length,
 		markdown.length,
 	);
+}
+
+async function uploadEditorImages(files: File[], cover = false): Promise<void> {
+	if (
+		!files.length ||
+		saving ||
+		deleting ||
+		mediaCommitLocked ||
+		imageUploading ||
+		!capabilities.imageBedUpload
+	)
+		return;
+	const selection = getEditorSelection();
+	const source = form.markdown;
+	const view = markdownView;
+	const visualHandle = milkdownHandle;
+	const sourceHandle = codeMirrorHandle;
+	if (!cover && (view === "visual" ? !visualHandle : !sourceHandle)) {
+		mediaMessage = "编辑器尚未就绪，请稍后上传图片。";
+		return;
+	}
+	const controller = new AbortController();
+	imageUploadController = controller;
+	const uploaded: { file: File; url: string }[] = [];
+	let uploadError = "";
+	try {
+		if (files.length > 5) throw new TypeError("每次最多上传 5 张图片。");
+		for (const file of files) validateImageBedFile(file);
+		imageUploading = true;
+		mediaMessage = cover ? "正在上传封面到图床…" : "正在上传图片到图床…";
+		for (const file of files) {
+			const url = await uploadImageBedImage(file, controller.signal);
+			if (controller.signal.aborted) return;
+			uploaded.push({ file, url });
+		}
+	} catch (error) {
+		if (controller.signal.aborted) return;
+		uploadError = error instanceof Error ? error.message : "图片上传失败，请重试。";
+	} finally {
+		if (!controller.signal.aborted) imageUploading = false;
+	}
+	if (controller.signal.aborted) return;
+	if (cover && uploaded[0]) {
+		imageUploading = true;
+		await applyCoverReference(uploaded[0].url, "封面已上传图床并自动填入，保存文章后生效。");
+		imageUploading = false;
+	} else if (uploaded.length) {
+		const markdown = uploaded
+			.map(({ file, url }) => createMarkdownImage({ alt: file.name, src: url }))
+			.join("\n\n");
+		if (
+			form.markdown !== source ||
+			markdownView !== view ||
+			(view === "visual" ? milkdownHandle !== visualHandle : codeMirrorHandle !== sourceHandle)
+		) {
+			mediaMessage = `图片已上传，但正文状态已变化，未覆盖内容。链接：${uploaded.map(({ url }) => url).join(" ")}`;
+			return;
+		}
+		if (view === "visual") {
+			if (!visualHandle?.replaceMarkdown(markdown, selection.from, selection.to)) {
+				mediaMessage = `图片已上传，但画布未能插入。链接：${uploaded.map(({ url }) => url).join(" ")}`;
+				return;
+			}
+		} else {
+			sourceHandle?.replaceRange(
+				markdown,
+				selection.from,
+				selection.to,
+				markdown.length,
+				markdown.length,
+			);
+		}
+	}
+	mediaMessage =
+		uploadError ||
+		`已上传 ${uploaded.length} 张图片${cover ? "并设置封面" : "并自动插入图床链接"}。`;
+}
+
+function handleImagePaste(event: ClipboardEvent): void {
+	if (!capabilities.imageBedUpload) return;
+	const files = Array.from(event.clipboardData?.files ?? []).filter((file) =>
+		file.type.startsWith("image/"),
+	);
+	if (!files.length) return;
+	event.preventDefault();
+	event.stopPropagation();
+	void uploadEditorImages(files);
+}
+
+function handleImageDrop(event: DragEvent): void {
+	if (!capabilities.imageBedUpload) return;
+	const files = Array.from(event.dataTransfer?.files ?? []).filter((file) =>
+		file.type.startsWith("image/"),
+	);
+	if (!files.length) return;
+	event.preventDefault();
+	event.stopPropagation();
+	void uploadEditorImages(files);
+}
+
+function handleImageDragOver(event: DragEvent): void {
+	if (
+		capabilities.imageBedUpload &&
+		Array.from(event.dataTransfer?.items ?? []).some(
+			(item) => item.kind === "file" && item.type.startsWith("image/"),
+		)
+	)
+		event.preventDefault();
+}
+
+function uploadCoverFile(event: Event): void {
+	const input = event.currentTarget as HTMLInputElement;
+	const file = input.files?.[0];
+	input.value = "";
+	if (file) void uploadEditorImages([file], true);
 }
 
 function insertStagedAsset(record: LocalStagedAssetRecord): void {
@@ -1027,6 +1147,7 @@ async function deleteCurrentArticle(): Promise<void> {
 		!storageSlug ||
 		deleting ||
 		saving ||
+		imageUploading ||
 		mediaCommitLocked ||
 		!expectedSha ||
 		!expectedHeadSha
@@ -1099,7 +1220,7 @@ async function deleteCurrentArticle(): Promise<void> {
 
 async function saveArticle(event: SubmitEvent): Promise<void> {
 	event.preventDefault();
-	if (saving || mediaCommitLocked || !ready) return;
+	if (saving || imageUploading || mediaCommitLocked || !ready) return;
 	const submitter = event.submitter;
 	const action =
 		submitter instanceof HTMLButtonElement && submitter.value === "publish" ? "publish" : "draft";
@@ -1265,6 +1386,7 @@ onMount(() => {
 });
 
 onDestroy(() => {
+	imageUploadController?.abort();
 	if (draftTimer !== undefined) clearTimeout(draftTimer);
 	if (slugCheckTimer !== undefined) clearTimeout(slugCheckTimer);
 	revokeMediaPreviewUrls();
@@ -1342,16 +1464,17 @@ $effect(() => {
 						</div>
 						{#if visualEditorFailed}<div class="canvas-failure" role="alert"><strong>无法安全建立可视画布</strong><span>{errorMessage.replace("画布初始化失败：", "")}</span><button type="button" onclick={retryVisualEditor}>重试画布</button><button type="button" onclick={() => (markdownView = "write")}>转到 Markdown 源码</button></div>{/if}
 						<div class="view-tabs" aria-label="Markdown 工作区视图">
-							<button class:active={markdownView === "visual"} type="button" onclick={() => { errorMessage = ""; visualEditorFailed = false; markdownView = "visual"; }}>所见即所得</button>
-							<button class:active={markdownView === "write"} type="button" onclick={() => { errorMessage = ""; markdownView = "write"; }}>Markdown 源码</button>
+							<button class:active={markdownView === "visual"} type="button" disabled={imageUploading} onclick={() => { errorMessage = ""; visualEditorFailed = false; markdownView = "visual"; }}>所见即所得</button>
+							<button class:active={markdownView === "write"} type="button" disabled={imageUploading} onclick={() => { errorMessage = ""; markdownView = "write"; }}>Markdown 源码</button>
 						</div>
 						<EditorToolbar
-							disabled={saving || mediaCommitLocked || markdownView === "preview" || (markdownView === "visual" && (!visualEditorReady || visualEditorFailed))}
+							disabled={saving || imageUploading || mediaCommitLocked || markdownView === "preview" || (markdownView === "visual" && (!visualEditorReady || visualEditorFailed))}
 							specialDisabled={saving || mediaCommitLocked || markdownView === "preview"}
 							showLink={capabilities.articleLinks || capabilities.externalHttpsLinks}
 							showImage={
 								capabilities.externalHttpsLinks ||
 								capabilities.smallImageUpload ||
+								capabilities.imageBedUpload ||
 								capabilities.pdfAttachmentUpload
 							}
 							oninline={applyInlineCommand}
@@ -1363,13 +1486,13 @@ $effect(() => {
 							onredo={redoEditor}
 							onspecial={openSpecialBlockDialog}
 						/>
-						<div class:split={markdownView === "split"} class="markdown-workspace">
+						<div class:split={markdownView === "split"} class="markdown-workspace" role="group" aria-label="正文编辑区" onpastecapture={handleImagePaste} ondropcapture={handleImageDrop} ondragover={handleImageDragOver}>
 							{#if markdownView === "visual"}
 								<div class="workspace-pane visual-pane">
 									{#key visualEditorGeneration}
 										<MilkdownEditor
 											value={form.markdown}
-											disabled={saving || mediaCommitLocked}
+											disabled={saving || imageUploading || mediaCommitLocked}
 											onchange={updateMarkdown}
 											onerror={handleVisualEditorError}
 											onsource={openSourceFromCanvas}
@@ -1379,13 +1502,14 @@ $effect(() => {
 									{/key}
 								</div>
 							{:else if markdownView === "write" || markdownView === "split"}
-								<div class="workspace-pane"><CodeMirrorEditor value={form.markdown} onchange={updateMarkdown} disabled={saving || mediaCommitLocked} onready={(handle) => { codeMirrorHandle = handle; insertPendingSpecialBlock(handle); }} ondispose={() => (codeMirrorHandle = undefined)} /></div>
+								<div class="workspace-pane"><CodeMirrorEditor value={form.markdown} onchange={updateMarkdown} disabled={saving || imageUploading || mediaCommitLocked} onready={(handle) => { codeMirrorHandle = handle; insertPendingSpecialBlock(handle); }} ondispose={() => (codeMirrorHandle = undefined)} /></div>
 							{/if}
 							{#if markdownView === "preview" || markdownView === "split"}
 								<div class="workspace-pane"><MarkdownPreview markdown={form.markdown} /></div>
 							{/if}
 						</div>
 					</section>
+					{#if capabilities.imageBedUpload && mediaMessage}<p role="status">{mediaMessage}</p>{/if}
 
 
 					{#if capabilities.articleAssetDetails && mode === "edit" && repositoryResources.length > 0}
@@ -1486,6 +1610,9 @@ $effect(() => {
 								<button class:active={coverSource === "repository"} type="button" onclick={() => (coverSource = "repository")}>当前文章图片</button>
 								<button class:active={coverSource === "remote"} type="button" onclick={() => (coverSource = "remote")}>HTTPS 地址</button>
 							</div>
+							{#if capabilities.imageBedUpload}
+								<label class="file-picker">上传图床并设为封面<input type="file" accept="image/jpeg,image/png,image/webp" disabled={saving || imageUploading || mediaCommitLocked} onchange={uploadCoverFile} /></label>
+							{/if}
 							{#if coverSource === "repository"}
 								{#if mode === "edit" && repositoryCoverCandidates.length > 0}
 									<div class="cover-candidates">
@@ -1521,8 +1648,8 @@ $effect(() => {
 					{#if mode === "edit" && capabilities.articleDelete}
 						<button class="delete-article" type="button" disabled={deleting || saving || mediaCommitLocked} onclick={() => void deleteCurrentArticle()}>{deleting ? "正在删除…" : "删除文章"}</button>
 					{/if}
-					<button name="action" value="draft" type="submit" disabled={deleting || saving || mediaCommitLocked || (!dirty && stagedAssets.length === 0 && resourceChanges.length === 0)}>{saving ? "正在提交…" : "保存 GitHub 草稿"}</button>
-					<button class="publish" name="action" value="publish" type="submit" disabled={deleting || saving || mediaCommitLocked || (!dirty && stagedAssets.length === 0 && resourceChanges.length === 0)}>{saving ? "正在提交…" : "正式发布"}</button>
+					<button name="action" value="draft" type="submit" disabled={deleting || saving || imageUploading || mediaCommitLocked || (!dirty && stagedAssets.length === 0 && resourceChanges.length === 0)}>{saving ? "正在提交…" : "保存 GitHub 草稿"}</button>
+					<button class="publish" name="action" value="publish" type="submit" disabled={deleting || saving || imageUploading || mediaCommitLocked || (!dirty && stagedAssets.length === 0 && resourceChanges.length === 0)}>{saving ? "正在提交…" : "正式发布"}</button>
 				</div>
 			</footer>
 		</form>
@@ -1552,7 +1679,7 @@ $effect(() => {
 				</section>
 			</div>
 		{/if}
-		{#if capabilities.externalHttpsLinks || capabilities.smallImageUpload || capabilities.pdfAttachmentUpload}
+		{#if capabilities.imageBedUpload || capabilities.externalHttpsLinks || capabilities.smallImageUpload || capabilities.pdfAttachmentUpload}
 		<ImageDialog
 			open={imageDialogOpen && !mediaCommitLocked}
 			{capabilities}

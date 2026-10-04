@@ -9,3 +9,7 @@ LOCAL_PREVIEW=true
 # 图床外链 URL：左侧「媒体」菜单点击时新窗口打开此地址（前端可见，非 Secret）。
 # 必须是 https:// 开头；留空或不是 https 时菜单降级为灰态"图床未配置"。
 PUBLIC_IMGBED_URL=
+
+FEATURE_IMAGEBED_UPLOAD=true
+IMAGEBED_BASE_URL=https://pic.narciranran.buzz
+IMAGEBED_UPLOAD_FOLDER=blog

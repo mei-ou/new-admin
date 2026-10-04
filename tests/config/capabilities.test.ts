@@ -23,6 +23,7 @@ describe("后台能力策略", () => {
 			articleLinks: true,
 			externalHttpsLinks: true,
 			smallImageUpload: true,
+			imageBedUpload: false,
 			coverManagement: true,
 			articleDelete: true,
 			pdfAttachmentUpload: false,
