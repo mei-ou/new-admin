@@ -17,10 +17,10 @@ import type { GitProvider } from "../../../providers/git/types";
 import { initializeProvider } from "../../../providers/registry";
 import type { AuthenticatedPrincipal, RuntimeEnv } from "../../../types/env";
 import type { ProviderFactory } from "../../../types/provider";
-import { parseSlug } from "../../../utils/slug-utils";
+import { parseStorageId } from "../../../utils/slug-utils";
 import { parseStagedArticleAssetManifest } from "../../media/article-asset-manifest";
 import { loadStagedArticleAssets } from "../../media/services/load-staged-article-assets";
-import { resolveArticleCodec } from "../article-schema";
+import { resolveArticleCodec, resolveArticleContentType } from "../article-schema";
 import { recoverArticleCommit } from "../services/recover-article-commit";
 import { createArticle, type WriteArticleDependencies } from "../services/write-article";
 
@@ -117,7 +117,8 @@ export async function handleCreateArticle(
 	if (!bodyResult.success) {
 		throw new ApiError(400, "INVALID_REQUEST", "文章创建请求无效。");
 	}
-	const storageSlug = parseSlug(bodyResult.data.storageSlug);
+	const contentType = resolveArticleContentType(context.env, undefined);
+	const storageSlug = parseStorageId(bodyResult.data.storageSlug, contentType.filenamePolicy);
 	// codec 由部署环境解析：编辑器信封与 Front-matter 必须用同一套内容类型定义，
 	// 否则会出现「按 A 类型校验、按 B 类型序列化」的错位。
 	const codec = resolveArticleCodec(context.env);

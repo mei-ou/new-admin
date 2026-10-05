@@ -100,7 +100,10 @@ function toSummary(article: RemoteArticle): ArticleSummary {
 		draft: readFrontmatterBoolean(article.frontmatter, "draft", true),
 		description: readFrontmatterText(article.frontmatter, "description"),
 		tags: readFrontmatterTextArray(article.frontmatter, "tags"),
-		category: readFrontmatterNullableText(article.frontmatter, "category"),
+		category:
+			article.pathAlias === `${article.storageSlug}.md`
+				? article.storageSlug.split("/").slice(0, -1).join("/") || null
+				: readFrontmatterNullableText(article.frontmatter, "category"),
 		pinned: readFrontmatterBoolean(article.frontmatter, "pinned", false),
 	};
 }

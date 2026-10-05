@@ -8,7 +8,10 @@ import {
 } from "../../../core/security/path-policy";
 import type { GitProvider } from "../../../providers/git/types";
 import type { RemoteArticle } from "../../../types/article";
-import { parseMarkdownDocument } from "../../../utils/frontmatter-utils";
+import {
+	parseEditableMarkdownDocument,
+	parseMarkdownDocument,
+} from "../../../utils/frontmatter-utils";
 import { summarizeArticleAssets } from "../../media/services/summarize-article-assets";
 import type { FrontmatterCodec } from "../article-schema";
 import { readFrontmatterText } from "../frontmatter-readers";
@@ -78,7 +81,9 @@ export async function readArticle(
 
 	let parsed: ReturnType<typeof parseMarkdownDocument>;
 	try {
-		parsed = parseMarkdownDocument(dependencies.codec, file.content);
+		parsed = dependencies.codec.preserveUnknownFrontmatter
+			? parseEditableMarkdownDocument(dependencies.codec, file.content)
+			: parseMarkdownDocument(dependencies.codec, file.content);
 	} catch {
 		// 仓库内容属于不可信外部数据，不能把 Zod/YAML 解析细节直接暴露给 API 调用者。
 		throw new ApiError(422, "ARTICLE_INVALID", "远端文章格式无效，无法安全打开。");

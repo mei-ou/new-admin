@@ -47,3 +47,5 @@ coverage/
 
 # Wrangler 自动生成的类型定义（可由 `wrangler types` 重新生成；若 CI 需直接类型检查可去掉此行）
 worker-configuration.d.ts
+
+wrangler.newfirefly.jsonc

@@ -2,16 +2,18 @@ import { ApiError } from "../../../core/http/errors";
 import {
 	type ArticlePathConfig,
 	buildArticlePath,
+	buildArticlePathAlias,
 	FALLBACK_ARTICLE_PATH_CONFIG,
+	parseArticlePath,
 } from "../../../core/security/path-policy";
 import type { GitProvider } from "../../../providers/git/types";
 import type { ArticleDeleteResult } from "../../../types/article";
-import { parseSlug } from "../../../utils/slug-utils";
 
 const GIT_OBJECT_SHA = /^[a-f0-9]{40,64}$/;
 
 export interface RecoverDeletedArticleDependencies {
-	gitProvider: Pick<GitProvider, "getHead" | "listDirectoryAtCommit">;
+	gitProvider: Pick<GitProvider, "getHead" | "listDirectoryAtCommit"> &
+		Partial<Pick<GitProvider, "getFileAtCommit">>;
 	pathConfig?: ArticlePathConfig;
 }
 
@@ -29,17 +31,37 @@ export async function recoverDeletedArticle(
 	candidateCommitShaInput: unknown,
 	dependencies: RecoverDeletedArticleDependencies,
 ): Promise<ArticleDeleteResult | undefined> {
-	const storageSlug = parseSlug(storageSlugInput);
+	const pathConfig = dependencies.pathConfig ?? FALLBACK_ARTICLE_PATH_CONFIG;
+	const articlePath = buildArticlePath(storageSlugInput, pathConfig);
+	const storageSlug = parseArticlePath(articlePath, pathConfig).storageId;
 	const baseHeadSha = parseCommitSha(baseHeadShaInput);
 	const candidateCommitSha = parseCommitSha(candidateCommitShaInput);
 	if (!baseHeadSha || !candidateCommitSha) return undefined;
 
 	const head = await dependencies.gitProvider.getHead();
 	if (head.commitSha !== candidateCommitSha || !head.commitUrl) return undefined;
-	const articlePath = buildArticlePath(
-		storageSlug,
-		dependencies.pathConfig ?? FALLBACK_ARTICLE_PATH_CONFIG,
-	);
+	if (!pathConfig.usePageBundle) {
+		const getFile = dependencies.gitProvider.getFileAtCommit;
+		if (!getFile)
+			throw new ApiError(503, "CONFIGURATION_ERROR", "Git Provider 缺少单文件删除恢复能力。");
+		const original = await getFile.call(dependencies.gitProvider, articlePath, baseHeadSha);
+		if (original.path !== articlePath) return undefined;
+		try {
+			await getFile.call(dependencies.gitProvider, articlePath, candidateCommitSha);
+			return undefined;
+		} catch (error) {
+			if (!(error instanceof ApiError) || error.status !== 404 || error.code !== "NOT_FOUND")
+				throw error;
+		}
+		const pathAlias = buildArticlePathAlias(storageSlug, pathConfig);
+		return {
+			storageSlug,
+			pathAlias,
+			commitSha: head.commitSha,
+			commitUrl: head.commitUrl,
+			deletedFiles: [pathAlias],
+		};
+	}
 	const bundlePath = articlePath.slice(0, articlePath.lastIndexOf("/"));
 	const originalEntries = await dependencies.gitProvider.listDirectoryAtCommit(
 		bundlePath,

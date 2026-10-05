@@ -1,5 +1,6 @@
 import { ApiError } from "../core/http/errors";
 import { fireflySite } from "./firefly";
+import { newfireflySite } from "./newfirefly";
 import { assertValidSiteConfig } from "./schema";
 import type { ContentTypeConfig, SiteConfig } from "./types";
 
@@ -9,7 +10,10 @@ import type { ContentTypeConfig, SiteConfig } from "./types";
  * 新增一套部署 = 在这里登记一个站点 + 在部署环境变量里设 `SITE_ID`。核心逻辑不感知站点。
  */
 
-const SITE_REGISTRY: ReadonlyMap<string, SiteConfig> = new Map([[fireflySite.id, fireflySite]]);
+const SITE_REGISTRY: ReadonlyMap<string, SiteConfig> = new Map([
+	[fireflySite.id, fireflySite],
+	[newfireflySite.id, newfireflySite],
+]);
 
 /** 站点配置是静态模块，结构校验是纯计算；按站点缓存一次即可，不必每个请求重跑。 */
 const validatedSiteIds = new Set<string>();

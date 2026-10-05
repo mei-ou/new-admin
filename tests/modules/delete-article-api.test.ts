@@ -100,6 +100,7 @@ function repositoryFactory(
 
 function enabledEnv(): RuntimeEnv {
 	return {
+		SITE_ID: "firefly",
 		FEATURE_ARTICLE_DELETE: "true",
 		RATE_LIMITER: { limit: vi.fn().mockResolvedValue({ success: true }) },
 	};

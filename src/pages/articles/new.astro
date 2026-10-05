@@ -1,11 +1,21 @@
 ---
+import { env } from "cloudflare:workers";
 import ArticleEditor from "../../components/articles/ArticleEditor.svelte";
+import ConfiguredArticleEditor from "../../components/articles/ConfiguredArticleEditor.svelte";
 import { guardModule } from "../../core/config/feature-flags";
 import AdminLayout from "../../layouts/AdminLayout.astro";
+import { createArticleEditorConfig } from "../../modules/articles/editor-config";
+import { getSoleContentType, resolveSiteConfig } from "../../sites";
 
 guardModule("articles");
+const site = resolveSiteConfig(env);
+const config = createArticleEditorConfig(site.id, getSoleContentType(site));
 ---
 
 <AdminLayout title="新建文章" description="创建一篇新的 Firefly Markdown 文章。">
-	<ArticleEditor mode="create" capabilities={Astro.locals.capabilities} client:load />
+	{config.pathStrategy === "flat" ? (
+		<ConfiguredArticleEditor mode="create" config={config} principalId={Astro.locals.principal?.sub ?? ""} capabilities={Astro.locals.capabilities} client:load />
+	) : (
+		<ArticleEditor mode="create" capabilities={Astro.locals.capabilities} client:load />
+	)}
 </AdminLayout>

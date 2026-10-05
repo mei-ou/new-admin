@@ -7,13 +7,17 @@ import {
 	type GitHubProviderFactoryOptions,
 } from "../../../providers/git/github-factory";
 import { initializeProvider } from "../../../providers/registry";
+import { toArticlePathConfig } from "../../../sites";
 import type { AuthenticatedPrincipal, RuntimeEnv } from "../../../types/env";
 import type { ProviderFactory } from "../../../types/provider";
-import { parseSlug } from "../../../utils/slug-utils";
+import { parseStorageId } from "../../../utils/slug-utils";
+import { resolveArticleContentType } from "../article-schema";
 import type { ArticleRepository } from "./get-article-detail";
 
 export interface ArticleSlugCheckRequestContext {
 	slug: unknown;
+	/** 请求选定的内容类型标识；省略时回退到站点唯一类型。 */
+	typeId?: unknown;
 	principal: AuthenticatedPrincipal | undefined;
 	env: RuntimeEnv;
 }
@@ -37,7 +41,10 @@ export async function handleCheckArticleSlug(
 	if (!context.principal) {
 		throw new ApiError(401, "AUTH_REQUIRED", "需要登录后才能访问。");
 	}
-	const slug = parseSlug(context.slug);
+	// 内容类型先于 Provider 解析（只依赖部署环境），未登记的类型在读取任何 Secret 之前就 400。
+	const contentType = resolveArticleContentType(context.env, context.typeId);
+	// 早期校验只依赖内容类型的文件名策略；扩展名与分类子目录开关由 `buildArticlePath` 执行。
+	const storageId = parseStorageId(context.slug, contentType.filenamePolicy);
 	await enforceRateLimit(context.env.RATE_LIMITER, context.principal.sub, "articles-read");
 
 	const factoryOptions: GitHubProviderFactoryOptions = { readEnv: () => context.env };
@@ -47,7 +54,11 @@ export async function handleCheckArticleSlug(
 	const repository = initializeProvider("articles", createRepositoryFactory(factoryOptions));
 	if (!repository) throw new ApiError(404, "NOT_FOUND", "资源不存在。");
 
-	const path = buildArticlePath(slug, repository.config);
+	// 目标路径按请求选定的内容类型派生：同名的 `friends` 与 `posts` 落在不同目录。
+	const path = buildArticlePath(
+		storageId,
+		toArticlePathConfig(contentType, repository.config.contentRoot),
+	);
 	if (!repository.provider.getHead || !repository.provider.getFileAtCommit) {
 		throw new ApiError(503, "CONFIGURATION_ERROR", "Git Provider 缺少一致性读取能力。");
 	}

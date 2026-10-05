@@ -1,0 +1,19 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "newfirefly-local-preview",
+	"main": "./src/worker.ts",
+	"compatibility_date": "2026-08-11",
+	"compatibility_flags": ["nodejs_compat"],
+	"vars": {
+		"APP_ENV": "development",
+		"LOCAL_PREVIEW": "true",
+		"SITE_ID": "newfirefly",
+		"FEATURE_IMAGEBED_UPLOAD": "true",
+		"FEATURE_SMALL_IMAGE_UPLOAD": "false",
+		"FEATURE_EXTERNAL_HTTPS_LINKS": "true",
+		"FEATURE_ARTICLE_DELETE": "true",
+		"FEATURE_COVER_MANAGEMENT": "true",
+		"FEATURE_ARTICLE_LINKS": "false",
+		"IMAGEBED_BASE_URL": "https://pic.narciranran.buzz"
+	}
+}

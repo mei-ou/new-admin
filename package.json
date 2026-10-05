@@ -19,6 +19,9 @@
 		"test:watch": "vitest",
 		"build": "astro build && node scripts/check-milkdown-budget.mjs",
 		"check:milkdown-budget": "node scripts/check-milkdown-budget.mjs",
+		"check:newfirefly": "node scripts/check-newfirefly-config.mjs",
+		"check:newfirefly-build": "node scripts/check-newfirefly-config.mjs --built",
+		"build:newfirefly": "node scripts/build-newfirefly.mjs",
 		"preview": "astro preview",
 		"deploy": "pnpm build && wrangler deploy --config dist/server/wrangler.json"
 	},

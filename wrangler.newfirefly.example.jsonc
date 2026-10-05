@@ -1,0 +1,49 @@
+{
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "newfirefly-admin",
+	"compatibility_date": "2026-08-11",
+	"compatibility_flags": ["nodejs_compat"],
+	"main": "./src/worker.ts",
+	"vars": {
+		"APP_VERSION": "0.1.0",
+		"APP_ENV": "production",
+		"SITE_ID": "newfirefly",
+		"ACCESS_TEAM_DOMAIN": "REPLACE_WITH_ACCESS_TEAM_DOMAIN",
+		"ACCESS_AUDIENCE": "REPLACE_WITH_ACCESS_APPLICATION_AUDIENCE",
+		"ADMIN_ORIGIN": "https://blog-admin.narciranran.buzz",
+		"ACCESS_ALLOWED_EMAILS": "REPLACE_WITH_ALLOWED_EMAIL",
+		"ACCESS_ALLOWED_SUBJECTS": "",
+		"GITHUB_OWNER": "mei-ou",
+		"GITHUB_REPO": "newfirefly",
+		"GITHUB_BRANCH": "main",
+		"GITHUB_CONTENT_ROOT": "src/content/posts",
+		"PUBLIC_ARTICLE_URL_TEMPLATE": "",
+		"PUBLIC_IMGBED_URL": "https://pic.narciranran.buzz/",
+		"IMAGEBED_BASE_URL": "https://pic.narciranran.buzz",
+		"IMAGEBED_UPLOAD_FOLDER": "newfirefly-blog",
+		"FEATURE_IMAGEBED_UPLOAD": "true",
+		"FEATURE_ARTICLE_LINKS": "false",
+		"FEATURE_EXTERNAL_HTTPS_LINKS": "true",
+		"FEATURE_SMALL_IMAGE_UPLOAD": "false",
+		"FEATURE_COVER_MANAGEMENT": "true",
+		"FEATURE_ARTICLE_DELETE": "true",
+		"FEATURE_PDF_ATTACHMENT_UPLOAD": "false",
+		"FEATURE_ARTICLE_ASSET_DETAILS": "false",
+		"FEATURE_ARTICLE_ASSET_RENAME": "false"
+	},
+	"d1_databases": [
+		{
+			"binding": "IDEMPOTENCY_DB",
+			"database_name": "newfirefly-admin-idempotency",
+			"database_id": "REPLACE_WITH_NEW_D1_DATABASE_ID",
+			"migrations_dir": "migrations"
+		}
+	],
+	"ratelimits": [
+		{
+			"name": "RATE_LIMITER",
+			"namespace_id": "1002",
+			"simple": { "limit": 60, "period": 60 }
+		}
+	]
+}

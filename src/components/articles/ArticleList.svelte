@@ -1,4 +1,5 @@
 <script lang="ts">
+import type { StorageIdPolicy } from "../../utils/slug-utils";
 import {
 	type ArticleListPayload,
 	buildArticleListApiUrl,
@@ -7,6 +8,12 @@ import {
 	parseArticleListError,
 	parseArticleListPayload,
 } from "./article-list-state";
+import { articleRoute } from "./configured-editor-state";
+
+let {
+	filenamePolicy = "ascii-slug",
+	allowCategoryPath = false,
+}: { filenamePolicy?: StorageIdPolicy; allowCategoryPath?: boolean } = $props();
 
 let articles = $state<ArticleListPayload | null>(null);
 let loading = $state(true);
@@ -41,7 +48,7 @@ async function loadArticles(targetPage = page): Promise<void> {
 		if (!response.ok) {
 			throw new Error(parseArticleListError(body, response.status));
 		}
-		const nextArticles = parseArticleListPayload(body);
+		const nextArticles = parseArticleListPayload(body, filenamePolicy, allowCategoryPath);
 		if (sequence === requestSequence) {
 			articles = nextArticles;
 			page = nextArticles.page;
@@ -148,7 +155,7 @@ $effect(() => {
 					<article class="article-row">
 						<div class="article-main">
 							<div class="title-row">
-								<a href={`/articles/${article.storageSlug}`}>{article.title}</a>
+								<a href={articleRoute(article.storageSlug)}>{article.title}</a>
 								{#if article.pinned}<span class="badge pinned">置顶</span>{/if}
 								<span class:published={!article.draft} class:draft={article.draft} class="badge">
 									{article.draft ? "草稿" : "已发布"}
@@ -166,7 +173,7 @@ $effect(() => {
 								</div>
 							{/if}
 						</div>
-						<a class="edit-link" href={`/articles/${article.storageSlug}`}>编辑</a>
+						<a class="edit-link" href={articleRoute(article.storageSlug)}>编辑</a>
 					</article>
 				{/each}
 			</div>

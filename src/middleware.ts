@@ -55,6 +55,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
 				const previewResponse = await handleLocalPreviewApiRequest(
 					context.request,
 					context.locals.capabilities,
+					env,
 				);
 				if (previewResponse) {
 					previewResponse.headers.set("X-Request-Id", requestId);

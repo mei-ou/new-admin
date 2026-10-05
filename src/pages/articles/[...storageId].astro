@@ -1,0 +1,28 @@
+---
+import { env } from "cloudflare:workers";
+import ArticleEditor from "../../components/articles/ArticleEditor.svelte";
+import ConfiguredArticleEditor from "../../components/articles/ConfiguredArticleEditor.svelte";
+import { guardModule } from "../../core/config/feature-flags";
+import { buildArticlePath, parseArticlePath } from "../../core/security/path-policy";
+import AdminLayout from "../../layouts/AdminLayout.astro";
+import { createArticleEditorConfig } from "../../modules/articles/editor-config";
+import { getSoleContentType, resolveSiteConfig, toArticlePathConfig } from "../../sites";
+
+guardModule("articles");
+const site = resolveSiteConfig(env);
+const contentType = getSoleContentType(site);
+const config = createArticleEditorConfig(site.id, contentType);
+const pathConfig = toArticlePathConfig(contentType, site.contentRoot);
+const storageSlug = parseArticlePath(
+	buildArticlePath(Astro.params.storageId, pathConfig),
+	pathConfig,
+).storageId;
+---
+
+<AdminLayout title="编辑文章" description="安全读取并更新 Firefly Markdown 文章。">
+	{config.pathStrategy === "flat" ? (
+		<ConfiguredArticleEditor mode="edit" storageId={storageSlug} config={config} principalId={Astro.locals.principal?.sub ?? ""} capabilities={Astro.locals.capabilities} client:load />
+	) : (
+		<ArticleEditor mode="edit" storageSlug={storageSlug} capabilities={Astro.locals.capabilities} client:load />
+	)}
+</AdminLayout>

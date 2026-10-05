@@ -138,6 +138,7 @@ const contentTypeSchema = z
 		pathStrategy: z.enum(PATH_STRATEGIES),
 		filenamePolicy: z.enum(FILENAME_POLICIES),
 		allowCategoryPath: z.boolean(),
+		preserveUnknownFrontmatter: z.boolean().optional(),
 		fields: z.array(fieldDefinitionSchema),
 		refine: z.unknown().optional(),
 	})

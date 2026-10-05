@@ -78,6 +78,7 @@ export interface ContentTypeConfig {
 	readonly filenamePolicy: FilenamePolicy;
 	/** `flat` 策略下是否允许 `storageId` 携带分类子目录段。`pageBundle` 下必须为 false。 */
 	readonly allowCategoryPath: boolean;
+	readonly preserveUnknownFrontmatter?: boolean;
 	readonly fields: readonly FieldDefinition[];
 	/**
 	 * 跨字段校验（如 tsh520 `schedules` 的「农历必须有 lunarMonth/lunarDay」）。

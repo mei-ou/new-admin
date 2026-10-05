@@ -17,11 +17,11 @@ import type { GitProvider } from "../../../providers/git/types";
 import { initializeProvider } from "../../../providers/registry";
 import type { AuthenticatedPrincipal, RuntimeEnv } from "../../../types/env";
 import type { ProviderFactory } from "../../../types/provider";
-import { parseSlug } from "../../../utils/slug-utils";
+import { parseStorageId } from "../../../utils/slug-utils";
 import { parseStagedArticleAssetManifest } from "../../media/article-asset-manifest";
 import { loadStagedArticleAssets } from "../../media/services/load-staged-article-assets";
 import { parseArticleResourceChangeManifest } from "../article-resource-changes";
-import { resolveArticleCodec } from "../article-schema";
+import { resolveArticleCodec, resolveArticleContentType } from "../article-schema";
 import { recoverArticleCommit } from "../services/recover-article-commit";
 import { updateArticle, type WriteArticleDependencies } from "../services/write-article";
 
@@ -126,7 +126,8 @@ export async function handleUpdateArticle(
 		throw new ApiError(503, "IDEMPOTENCY_UNAVAILABLE", "重复提交保护服务暂时不可用。");
 	}
 
-	const storageSlug = parseSlug(context.slug);
+	const contentType = resolveArticleContentType(context.env, undefined);
+	const storageSlug = parseStorageId(context.slug, contentType.filenamePolicy);
 	const idempotencyKey = parseIdempotencyKey(context.request);
 	const bodyResult = requestBodySchema.safeParse(await parseJsonBody(context.request));
 	if (!bodyResult.success) {

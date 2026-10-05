@@ -2,6 +2,7 @@ import { ApiError } from "../../../core/http/errors";
 import {
 	type ArticlePathConfig,
 	buildArticlePath,
+	buildArticlePathAlias,
 	buildArticleResourcePath,
 	FALLBACK_ARTICLE_PATH_CONFIG,
 	parseArticlePath,
@@ -9,7 +10,11 @@ import {
 } from "../../../core/security/path-policy";
 import type { AtomicGitFileChange, GitProvider } from "../../../providers/git/types";
 import type { ArticleCommitResult } from "../../../types/article";
-import { buildMarkdownDocument } from "../../../utils/frontmatter-utils";
+import {
+	buildEditableMarkdownDocument,
+	buildMarkdownDocument,
+	parseEditableMarkdownDocument,
+} from "../../../utils/frontmatter-utils";
 import type { LoadedArticleAsset } from "../../media/services/load-staged-article-assets";
 import type { ArticleResourceChange } from "../article-resource-changes";
 import type { FrontmatterCodec } from "../article-schema";
@@ -18,7 +23,8 @@ import { readFrontmatterText } from "../frontmatter-readers";
 const GIT_OBJECT_SHA = /^[a-f0-9]{40,64}$/;
 
 export interface WriteArticleDependencies {
-	gitProvider: Pick<GitProvider, "commitFilesAtomically">;
+	gitProvider: Pick<GitProvider, "commitFilesAtomically"> &
+		Partial<Pick<GitProvider, "getFileAtCommit">>;
 	pathConfig?: ArticlePathConfig;
 	/** 当前内容类型的 Front-matter codec，由调用方从部署环境解析后注入。 */
 	codec: FrontmatterCodec;
@@ -190,6 +196,7 @@ function normalizeCommitResult(
 	expectedArticlePath: string,
 	expectedPaths: ReadonlySet<string>,
 	result: Awaited<ReturnType<GitProvider["commitFilesAtomically"]>>,
+	pathConfig: ArticlePathConfig,
 ): ArticleCommitResult {
 	const file = result.files.find((entry) => entry.path === expectedArticlePath);
 	const returnedPaths = new Set(result.files.map((entry) => entry.path));
@@ -205,7 +212,7 @@ function normalizeCommitResult(
 
 	return {
 		storageSlug,
-		pathAlias: `${storageSlug}/index.md`,
+		pathAlias: buildArticlePathAlias(storageSlug, pathConfig),
 		commitSha: result.commitSha,
 		commitUrl: result.commitUrl,
 		fileSha: file.fileSha,
@@ -243,6 +250,7 @@ export async function createArticle(
 		context.path,
 		new Set(files.map((file) => file.path)),
 		result,
+		pathConfig,
 	);
 }
 
@@ -261,6 +269,33 @@ export async function updateArticle(
 	const context = createWriteContext(storageSlugInput, editorInput, dependencies.codec, pathConfig);
 	const expectedHeadSha = parseExpectedSha(expectedHeadShaInput);
 	const expectedSha = parseExpectedSha(expectedShaInput);
+	if (dependencies.codec.preserveUnknownFrontmatter) {
+		if (!dependencies.gitProvider.getFileAtCommit) {
+			throw new ApiError(503, "CONFIGURATION_ERROR", "Git Provider 缺少保真读取能力。");
+		}
+		const original = await dependencies.gitProvider.getFileAtCommit(context.path, expectedHeadSha);
+		if (
+			original.path !== context.path ||
+			original.sha !== expectedSha ||
+			original.encoding !== "utf-8"
+		) {
+			throw new ApiError(409, "CONFLICT", "文章已经变化，请重新加载后编辑。");
+		}
+		let parsed: ReturnType<typeof parseEditableMarkdownDocument>;
+		try {
+			parsed = parseEditableMarkdownDocument(dependencies.codec, original.content);
+		} catch {
+			throw new ApiError(422, "ARTICLE_INVALID", "原文章字段无法安全保留，已停止保存。");
+		}
+		const article = dependencies.codec.editorInputSchema.parse(editorInput);
+		context.content = buildEditableMarkdownDocument(
+			dependencies.codec,
+			article.frontmatter,
+			parsed.unknownFrontmatter,
+			article.markdown,
+			article.slug,
+		);
+	}
 	const assets = dependencies.assets ?? [];
 	const resourceChanges = dependencies.resourceChanges ?? [];
 	validateCoverAssetBinding(context.coverReference, assets);
@@ -295,5 +330,6 @@ export async function updateArticle(
 		context.path,
 		new Set(files.map((file) => file.path)),
 		result,
+		pathConfig,
 	);
 }

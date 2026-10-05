@@ -1,4 +1,6 @@
 import { z } from "zod";
+import type { StorageIdPolicy } from "../../utils/slug-utils";
+import { validateEditorStorageId } from "./configured-editor-state";
 
 const articleSummarySchema = z
 	.object({
@@ -76,8 +78,30 @@ export function buildArticleListApiUrl(state: ArticleListSearchState): string {
 }
 
 /** 浏览器同样把 API 当作不可信边界；格式异常时拒绝渲染，而不是凭字段猜测继续执行。 */
-export function parseArticleListPayload(input: unknown): ArticleListPayload {
-	return articleListPayloadSchema.parse(input).articles;
+export function parseArticleListPayload(
+	input: unknown,
+	policy: StorageIdPolicy = "ascii-slug",
+	allowCategoryPath = false,
+): ArticleListPayload {
+	const items = articleSummarySchema.extend({
+		category: z
+			.string()
+			.min(1)
+			.max(policy === "unicode" ? 200 : 100)
+			.nullable(),
+		storageSlug: z.string().refine((value) => {
+			try {
+				validateEditorStorageId(value, policy, allowCategoryPath);
+				return true;
+			} catch {
+				return false;
+			}
+		}),
+	});
+	const schema = z
+		.object({ articles: articleListPayloadSchema.shape.articles.extend({ items: z.array(items) }) })
+		.strict();
+	return schema.parse(input).articles;
 }
 
 export function parseArticleListError(input: unknown, status: number): string {

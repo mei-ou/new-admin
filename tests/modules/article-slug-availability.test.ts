@@ -10,6 +10,7 @@ const HEAD_SHA = "b".repeat(40);
 const TREE_SHA = "c".repeat(40);
 const principal = { sub: "subject-1", email: "admin@example.com" };
 const validEnv: RuntimeEnv = {
+	SITE_ID: "firefly",
 	GITHUB_OWNER: "firefly-owner",
 	GITHUB_REPO: "firefly-blog",
 	GITHUB_BRANCH: "master",
@@ -87,7 +88,7 @@ describe("文章 storage slug 预检", () => {
 				{ slug: "../secret", principal, env: validEnv },
 				{ createRepositoryFactory: createFactory },
 			),
-		).rejects.toThrow("Slug 校验失败");
+		).rejects.toThrow("存储标识校验失败");
 		await expect(
 			handleCheckArticleSlug({ slug: "hello-world", principal: undefined, env: validEnv }),
 		).rejects.toMatchObject({ status: 401, code: "AUTH_REQUIRED" });

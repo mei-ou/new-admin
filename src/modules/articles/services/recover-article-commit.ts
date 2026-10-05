@@ -1,11 +1,12 @@
 import {
 	type ArticlePathConfig,
 	buildArticlePath,
+	buildArticlePathAlias,
 	FALLBACK_ARTICLE_PATH_CONFIG,
+	parseArticlePath,
 } from "../../../core/security/path-policy";
 import type { GitProvider } from "../../../providers/git/types";
 import type { ArticleCommitResult } from "../../../types/article";
-import { parseSlug } from "../../../utils/slug-utils";
 
 const GIT_OBJECT_SHA = /^[a-f0-9]{40,64}$/;
 
@@ -23,7 +24,9 @@ export async function recoverArticleCommit(
 	candidateCommitShaInput: unknown,
 	dependencies: RecoverArticleCommitDependencies,
 ): Promise<ArticleCommitResult | undefined> {
-	const storageSlug = parseSlug(storageSlugInput);
+	const pathConfig = dependencies.pathConfig ?? FALLBACK_ARTICLE_PATH_CONFIG;
+	const path = buildArticlePath(storageSlugInput, pathConfig);
+	const storageSlug = parseArticlePath(path, pathConfig).storageId;
 	if (
 		typeof candidateCommitShaInput !== "string" ||
 		!GIT_OBJECT_SHA.test(candidateCommitShaInput)
@@ -36,10 +39,6 @@ export async function recoverArticleCommit(
 		return undefined;
 	}
 
-	const path = buildArticlePath(
-		storageSlug,
-		dependencies.pathConfig ?? FALLBACK_ARTICLE_PATH_CONFIG,
-	);
 	const file = await dependencies.gitProvider.getFileAtCommit(path, candidateCommitShaInput);
 	if (file.path !== path) {
 		return undefined;
@@ -47,7 +46,7 @@ export async function recoverArticleCommit(
 
 	return {
 		storageSlug,
-		pathAlias: `${storageSlug}/index.md`,
+		pathAlias: buildArticlePathAlias(storageSlug, pathConfig),
 		commitSha: head.commitSha,
 		commitUrl: head.commitUrl,
 		fileSha: file.sha,

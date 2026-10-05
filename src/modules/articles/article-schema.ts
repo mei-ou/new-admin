@@ -53,6 +53,7 @@ export function buildArticleEditorInputSchema(contentType: ContentTypeConfig) {
  * 隐式路径；即便传错，严格 schema 也会直接解析失败（失败关闭），而不是静默接受字段错位的文章。
  */
 export interface FrontmatterCodec {
+	readonly preserveUnknownFrontmatter?: boolean;
 	/** 服务端权威校验 schema，由内容类型的字段定义派生。 */
 	readonly schema: z.ZodType<ArticleFrontmatter>;
 	/** 已知字段键集合。迭代顺序即 `contentType.fields` 顺序，决定 YAML 字段顺序。 */
@@ -79,6 +80,7 @@ export interface FrontmatterCodec {
  */
 export function createFrontmatterCodec(contentType: ContentTypeConfig): FrontmatterCodec {
 	return {
+		...(contentType.preserveUnknownFrontmatter ? { preserveUnknownFrontmatter: true } : {}),
 		schema: buildArticleFrontmatterSchema(contentType),
 		knownKeys: getFieldKeys(contentType),
 		editorInputSchema: buildArticleEditorInputSchema(

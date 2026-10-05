@@ -1,0 +1,99 @@
+# 参考版博客文章后台适配
+
+## 范围和仓库关系
+
+后台仍使用同一份 firefly-admin 代码，不需要为后台再复制一个仓库。参考博客前台需要一个你有写权限的 GitHub 仓库；可以沿用已有仓库，也可以独立建仓。不能把参考作者的仓库当成默认写入目标。
+
+本次以本地 `E:\mycode\tuanzi\newfirefly` 的文章模型为准，仅适配 `src/content/posts` 中的 Markdown 文章。不是旧交接文档描述的 15 集合完整 CMS。
+
+- 原 Firefly：`SITE_ID=firefly`，Page Bundle，原编辑器保持不变。
+- 参考版：`SITE_ID=newfirefly`，中文文件名、分类目录、单文件 `.md`，配置驱动编辑器。
+- 网页操作：新建、读取、可视化/Markdown 编辑、提交草稿、正式发布、删除、浏览器草稿、封面及正文图床上传，支持图片粘贴/拖入。
+- 更新从客户端指定的原始 HEAD 读取文章并校验 Blob SHA，再保留额外元数据，如 `descriptionSource`、`prev`、`next`。浏览器不能回传任意未知字段替换原文。
+- 删除仅删除目标文章文件，不删除分类、同目录文章或图床图片。
+
+## 部署配置
+
+`wrangler.jsonc` 仍指向原 Firefly，没有改动生产目标。本次没有推送、迁移数据库或部署。
+
+用户已确认参考博客仓库为 `mei-ou/newfirefly`。本地 checkout 的 origin 指向该仓库，默认分支引用及 GitHub Pages 工作流均为 `main`，模板已填写这三个 GitHub 配置项。远端当前状态与 Cloudflare Pages 的实际生产分支尚未核验；若前台部署在 Cloudflare，仍须确认其监听 `main`。
+
+新增 `wrangler.newfirefly.example.jsonc` 是待填写模板，不是可直接上线的配置。当前电脑已从模板准备 `wrangler.newfirefly.jsonc`，并通过 `.gitignore` 排除该本地账号配置；仍须填写全部 `REPLACE_WITH_...` 项。换电脑时需从模板重新准备：
+
+用户已确认新后台使用 `blog-admin.narciranran.buzz`，模板的 `ADMIN_ORIGIN` 已填写。原后台 `admin.narciranran.buzz` 保持不变。这里只记录域名选择，尚未创建 DNS、Worker 自定义域名或 Access 应用，新网址目前不能视为已经可用。
+
+1. GitHub 仓库已经填为 `mei-ou/newfirefly`、分支 `main`。保存文章只是向该分支提交；前台自动构建必须监听同一个分支，上线前需确认实际部署设置。
+2. 新后台域名已选定；仍需配置 Cloudflare Access 应用 Audience、Team Domain、允许的登录账号。访问控制需覆盖 `blog-admin.narciranran.buzz`，不能直接假定旧 Access 应用会保护新域名。
+3. 新建独立 D1 并填其 ID，执行现有全部 migrations。不要直接共用原后台 D1；当前幂等作用域不是按站点命名空间隔离的。
+4. 检查限流 namespace `1002` 是否已被别的部署使用，必要时换一个独立编号。
+5. 为新 Worker 单独设置 Secret `GITHUB_TOKEN` 和 `IMAGEBED_API_TOKEN`。不要写入 vars、Git 仓库或浏览器。GitHub 凭据仅授权目标博客仓库所需读写权限。
+
+模板使用图床，不绑定 R2，也没有 R2 清理 cron；Page Bundle 暂存上传、PDF 和资源改名关闭。没有提供图床 Token，因此真实上传仍待验证。
+
+Astro 配置支持通过 `ADMIN_WRANGLER_CONFIG` 选择构建配置；不设置时继续使用原 `wrangler.jsonc`。PowerShell 的后续部署步骤示例（本次未执行）：
+
+```powershell
+pnpm check:newfirefly
+pnpm exec wrangler d1 migrations apply IDEMPOTENCY_DB --remote --config wrangler.newfirefly.jsonc
+pnpm exec wrangler secret put GITHUB_TOKEN --config wrangler.newfirefly.jsonc
+pnpm exec wrangler secret put IMAGEBED_API_TOKEN --config wrangler.newfirefly.jsonc
+pnpm build:newfirefly
+```
+
+专用构建会自动核对 `dist/server/wrangler.json` 中 Worker 名、SITE_ID、目标仓库、分支、D1 和限流绑定是否与本地新配置一致。构建成功后仍须人工检查域名、Access 策略、Secret、迁移及前台监听分支，再决定执行（本次未执行）：
+
+```powershell
+pnpm exec wrangler deploy --config dist/server/wrangler.json
+```
+
+原后台上线之前必须清除上述环境变量，并重新构建原配置，不能拿参考版的旧 dist 部署原后台。不要直接使用原 `pnpm deploy` 代替配置确认。构建受缓存清理安全限制影响时，应停下核对；不要绕过删除保护。
+
+专用 `pnpm build:newfirefly` 只在子进程中选择新配置，不改变终端环境变量。上段环境变量注意事项适用于手动设置过 `ADMIN_WRANGLER_CONFIG` 的终端。
+
+新增 `pnpm check:newfirefly` 和 `pnpm check:newfirefly-build`，仅做本地静态检查；不读取 `.dev.vars` 或 Token，不联网、不修改数据库、不部署。检查拒绝占位项、错误站点/目标仓库、预览模式、缺少允许登录账号、vars 中的 Token，以及复用旧 Worker、域名、D1、限流编号。未来更换新后台域名不需要改检查脚本。该检查不能替代真实凭据、Access 策略和资源存在性的线上验收。
+
+配置检查与专用构建入口新增 16 项自动测试，包括错误配置停止、Token 不泄露、构建明确选择新配置、体积失败停止、过期产物拒绝；成功构建流程使用模拟构建器测试，不代表真实参考版生产构建已完成。当前真实本地配置仍缺四项 Access/账号/D1 信息，已验证专用构建在运行 Astro 前安全停止。
+
+## 限制和验收
+
+- 仅 `.md`，不编辑 MDX；不提供文件移动/重命名和目录管理；分类最多四层。
+- 不提供记账、应用展示、其他集合管理、服务器部署功能或前台样式移植。本次只改变后台适配。
+- 标签使用逗号分隔；草稿/发布按钮会分别将 `draft` 设置为 true/false。
+- 浏览器草稿手动保存，按站点、类型、登录主体和文章隔离；原仓库版本改变时不自动恢复旧草稿。
+- 未确认提交会锁定表单。原请求内容和幂等键存于当前标签页 sessionStorage，刷新后可沿用原请求重试；不要清除浏览器数据或关掉标签页后创建新的提交。若服务端仍报告未知状态，需要核对候选提交，不能以新键强行提交。
+- 图片上传先发生于图床，取消文章保存或删除文章不会同步删除图片，可能留下未引用图片。
+- 列表有深度/节点/读取数量上限，大仓库不是全量无限扫描。
+
+上线验收请先用测试仓库：中文分类文章新建 → 粘贴/上传图片 → 保存 → 重开 → 保留 descriptionSource 的更新 → 并发版本冲突 → 删除 → 确认邻接文章和图片仍在 → 确认前台部署成功。还需验证 Cloudflare Access、Token、D1、真实图床响应及真实仓库的端到端链路。
+
+本次已新增自动测试覆盖部署配置、真实格式读取、中文路径创建、未知字段保留、冲突停止写入、只删除单文件、删除恢复和编辑器转换。生产构建已完成，真实线上端到端验收未完成。
+
+## 本地浏览器验收记录（2026-10-04）
+
+新增 `wrangler.local-preview.jsonc`，仅供 development + HTTP loopback 的模拟预览，不绑定真实 GitHub、D1 或 R2。通过 `ADMIN_WRANGLER_CONFIG=wrangler.local-preview.jsonc` 启动本地 dev 服务。模拟文章只存内存，重启服务或相关模块热更新后清空；此配置禁止用于生产部署。
+
+配置驱动预览复用实际文章读取、保存、列表和删除服务，但 Git Provider 使用内存快照。生产鉴权、真实 GitHub 网络调用、D1 持久化不能通过这份预览验收。
+
+已使用无头 Chromium 在本机预览完成：
+
+- 中文分类文章创建，标题、标签及正文保存后重开。
+- 可视化与 Markdown 源码模式往返，粗体、二级标题和表格插入，手动浏览器草稿保存及刷新恢复。
+- 图床上传失败提示；通过浏览器拦截的模拟成功响应，验证正文自动插图、封面、粘贴及源码模式拖入图片。图片请求也由本地测试拦截，没有向图床上传真实文件。
+- 发布后 `draft=false`，删除后目标不存在、相邻文章仍保留。
+- 两份编辑页面产生版本冲突时，不覆盖较新的文章。
+- 模拟服务端提交成功后响应丢失：刷新恢复原请求，同一幂等键重试，提交 SHA 不变，没有新增重复提交。
+
+验收发现并修复了两项真实问题：Milkdown 误用 CodeMirror 的 `selection.main`，以及文本替换后选区仍绑定旧文档；同时修复了 dev SSR 中 Svelte renderer 被预打包后出现两份 server runtime 的加载错误。SSR 配置修复已通过实际浏览器打开验证，未修改 node_modules。
+
+当前标准全量测试为 838 通过、3 项既有媒体暂存测试失败，类型检查通过；此前 Astro 检查 282 个文件无错误或警告，配置驱动编辑器 Svelte 编译无警告，本轮新增部署脚本后未重跑 Astro 检查。已做额外时钟诊断：这 3 项用例的资源时间固定为 2026-08-14，运行时使用真实当前时间，超过 7 天有效期导致清理/配额断言失效；只在临时诊断中把时钟固定到该日期，整个媒体暂存文件 21 项通过。诊断文件已删除，没有更改原测试或生产过期策略，也不能把诊断结果算作当前时间的全量通过。
+
+已在获准环境完成 Astro 生产构建，没有绕过缓存删除保护。本次使用默认 `wrangler.jsonc`，产物仍指向原 Firefly；这只验证代码可构建，不能直接作为参考版上线配置。正式上线前必须按新后台配置重新构建并核对产物。
+
+修复体积检查脚本对单一 ArticleEditor 直接引用的旧假设：使用 TypeScript AST 识别普通字符串及模板字符串导入，分别检查两个编辑器静态依赖中的 Milkdown 动态入口，拒绝入口被提前静态加载。按这七个入口的实际静态依赖闭包去重计量，而非按文件名前缀漏算依赖；不递归加载依赖中尚未调用的其他动态功能（例如源码编辑器）。保守计入闭包内已经被主编辑器加载的共享静态依赖，保持 400 KiB gzip -9 上限不变。当前为 333.2 KiB gzip，16 个文件，检查通过；新增五项脚本回归测试。
+
+## 排版修复验收（2026-10-04）
+
+- 参考版编辑器改为元数据、正文、操作区分组卡片；常用字段优先，作者、语言、许可等低频字段收进“更多设置”。
+- 修复封面地址与上传控件重叠、复选框异常尺寸、窄屏输入框溢出；操作区取消悬浮，避免遮挡正文。
+- 在 320、390、768、1024、1440 像素宽度下分别检查“更多设置”开关，无横向溢出、字段逃出容器、封面控件重叠或操作区遮挡。
+- 手机尺寸下完成高级字段、模拟封面及正文图床插图、草稿保存、重开、发布和删除回归，无浏览器页面异常。仍是本地模拟，不代表真实图床或线上部署验收。

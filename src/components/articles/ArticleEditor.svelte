@@ -1,5 +1,5 @@
 <script lang="ts">
-import { onDestroy, onMount } from "svelte";
+import { onDestroy, onMount, tick } from "svelte";
 import { fireflyFrontmatterCodec } from "../../modules/articles/article-schema";
 import type { MilkdownEditorHandle } from "../../modules/editor-core/adapters/milkdown/MilkdownEditor.svelte";
 import MilkdownEditor from "../../modules/editor-core/adapters/milkdown/MilkdownEditor.svelte";
@@ -622,6 +622,7 @@ async function uploadEditorImages(files: File[], cover = false): Promise<void> {
 		if (!controller.signal.aborted) imageUploading = false;
 	}
 	if (controller.signal.aborted) return;
+	await tick();
 	if (cover && uploaded[0]) {
 		imageUploading = true;
 		await applyCoverReference(uploaded[0].url, "封面已上传图床并自动填入，保存文章后生效。");

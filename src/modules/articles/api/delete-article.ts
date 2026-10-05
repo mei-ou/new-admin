@@ -18,7 +18,8 @@ import { initializeProvider } from "../../../providers/registry";
 import type { ArticleDeleteResult } from "../../../types/article";
 import type { AuthenticatedPrincipal, RuntimeEnv } from "../../../types/env";
 import type { ProviderFactory } from "../../../types/provider";
-import { parseSlug } from "../../../utils/slug-utils";
+import { parseStorageId } from "../../../utils/slug-utils";
+import { resolveArticleContentType } from "../article-schema";
 import {
 	commitArticleDelete,
 	type PrepareArticleDeleteDependencies,
@@ -107,7 +108,8 @@ export async function handleDeleteArticle(
 		throw new ApiError(503, "IDEMPOTENCY_UNAVAILABLE", "重复提交保护服务暂时不可用。");
 	}
 
-	const storageSlug = parseSlug(context.slug);
+	const contentType = resolveArticleContentType(context.env, undefined);
+	const storageSlug = parseStorageId(context.slug, contentType.filenamePolicy);
 	const idempotencyKey = parseIdempotencyKey(context.request);
 	const body = requestBodySchema.safeParse(await parseJsonBody(context.request));
 	if (!body.success) {

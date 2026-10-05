@@ -2,12 +2,13 @@ import { ApiError } from "../../../core/http/errors";
 import {
 	type ArticlePathConfig,
 	buildArticlePath,
+	buildArticlePathAlias,
 	buildArticleResourcePath,
 	FALLBACK_ARTICLE_PATH_CONFIG,
+	parseArticlePath,
 } from "../../../core/security/path-policy";
 import type { GitDirectoryEntry, GitProvider } from "../../../providers/git/types";
 import type { ArticleDeleteResult } from "../../../types/article";
-import { parseSlug } from "../../../utils/slug-utils";
 import {
 	ARTICLE_ASSET_IMAGE_MAX_BYTES,
 	ARTICLE_ASSET_MAX_COUNT,
@@ -20,6 +21,7 @@ const GIT_OBJECT_SHA = /^[a-f0-9]{40,64}$/;
 const ADMIN_IMAGE_FILENAME = /^([a-z0-9]+(?:-[a-z0-9]+)*)-([a-f0-9]{12})\.(jpg|png|webp)$/;
 
 export interface ArticleDeletePlan {
+	pathAlias?: string;
 	storageSlug: string;
 	expectedHeadSha: string;
 	articlePath: string;
@@ -70,11 +72,24 @@ export async function prepareArticleDelete(
 	expectedArticleShaInput: unknown,
 	dependencies: PrepareArticleDeleteDependencies,
 ): Promise<ArticleDeletePlan> {
-	const storageSlug = parseSlug(storageSlugInput);
 	const expectedHeadSha = parseExpectedSha(expectedHeadShaInput, "分支版本");
 	const expectedArticleSha = parseExpectedSha(expectedArticleShaInput, "文章版本");
 	const pathConfig = dependencies.pathConfig ?? FALLBACK_ARTICLE_PATH_CONFIG;
-	const articlePath = buildArticlePath(storageSlug, pathConfig);
+	const articlePath = buildArticlePath(storageSlugInput, pathConfig);
+	const storageSlug = parseArticlePath(articlePath, pathConfig).storageId;
+	if (!pathConfig.usePageBundle) {
+		const article = await dependencies.gitProvider.getFileAtCommit(articlePath, expectedHeadSha);
+		if (article.path !== articlePath || article.sha !== expectedArticleSha) {
+			throw new ApiError(409, "CONFLICT", "文章已经变化，请重新加载后再删除。");
+		}
+		return {
+			storageSlug,
+			expectedHeadSha,
+			articlePath,
+			pathAlias: buildArticlePathAlias(storageSlug, pathConfig),
+			files: [{ path: articlePath, expectedSha: article.sha }],
+		};
+	}
 	const bundlePath = articlePath.slice(0, articlePath.lastIndexOf("/"));
 	const [article, entries] = await Promise.all([
 		dependencies.gitProvider.getFileAtCommit(articlePath, expectedHeadSha),
@@ -131,12 +146,12 @@ function normalizeDeleteResult(
 	const bundlePrefix = plan.articlePath.slice(0, plan.articlePath.lastIndexOf("/") + 1);
 	return {
 		storageSlug: plan.storageSlug,
-		pathAlias: `${plan.storageSlug}/index.md`,
+		pathAlias: plan.pathAlias ?? `${plan.storageSlug}/index.md`,
 		commitSha: result.commitSha,
 		commitUrl: result.commitUrl,
-		deletedFiles: plan.files.map(
-			(file) => `${plan.storageSlug}/${file.path.slice(bundlePrefix.length)}`,
-		),
+		deletedFiles: plan.pathAlias
+			? [plan.pathAlias]
+			: plan.files.map((file) => `${plan.storageSlug}/${file.path.slice(bundlePrefix.length)}`),
 	};
 }
 

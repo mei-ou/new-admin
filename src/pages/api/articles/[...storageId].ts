@@ -13,7 +13,7 @@ export const prerender = false;
  */
 export const GET: APIRoute = ({ request, params, locals }) =>
 	handleGetArticleDetail({
-		slug: params.slug,
+		slug: params.storageId,
 		// 内容类型由查询参数选定；省略时处理器回退到站点唯一类型（单类型站点行为不变）。
 		typeId: new URL(request.url).searchParams.get("typeId") ?? undefined,
 		principal: locals.principal,
@@ -22,7 +22,7 @@ export const GET: APIRoute = ({ request, params, locals }) =>
 
 export const HEAD: APIRoute = ({ params, locals }) =>
 	handleCheckArticleSlug({
-		slug: params.slug,
+		slug: params.storageId,
 		principal: locals.principal,
 		env,
 	});
@@ -31,7 +31,7 @@ export const PUT: APIRoute = ({ request, params, locals }) =>
 	handleUpdateArticle({
 		request,
 		requestId: locals.requestId,
-		slug: params.slug,
+		slug: params.storageId,
 		principal: locals.principal,
 		env,
 	});
@@ -40,7 +40,7 @@ export const DELETE: APIRoute = ({ request, params, locals }) =>
 	handleDeleteArticle({
 		request,
 		requestId: locals.requestId,
-		slug: params.slug,
+		slug: params.storageId,
 		principal: locals.principal,
 		env,
 	});

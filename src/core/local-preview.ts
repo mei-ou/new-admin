@@ -4,11 +4,14 @@ import {
 	type MediaTransactionPreview,
 	parseRenameMediaTransactionPreviewRequest,
 } from "../modules/media/media-transaction-preview";
+import { getSoleContentType, resolveSiteConfig } from "../sites";
 import type { AdminCapabilitySnapshot } from "../types/capability";
+import { createConfiguredLocalPreview } from "./configured-local-preview";
 import { jsonResponse } from "./http/response";
 import { enforceWriteRequestPolicy } from "./security/origin-policy";
 
 const LOCAL_PREVIEW_SUBJECT = "local-preview-user";
+const configuredPreviews = new Map<string, ReturnType<typeof createConfiguredLocalPreview>>();
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const PREVIEW_FILE_SHA = "a".repeat(40);
 const PREVIEW_COMMIT_SHA = "b".repeat(40);
@@ -408,8 +411,24 @@ async function handlePreviewWrite(request: Request, routeSlug?: string): Promise
 export async function handleLocalPreviewApiRequest(
 	request: Request,
 	capabilities: AdminCapabilitySnapshot,
+	environment?: unknown,
 ): Promise<Response | null> {
 	const url = new URL(request.url);
+	if (environment !== undefined) {
+		if (!isLocalPreviewRequest(request, environment)) return null;
+		const site = resolveSiteConfig(environment);
+		if (
+			getSoleContentType(site).pathStrategy === "flat" &&
+			(url.pathname === "/api/articles" || url.pathname.startsWith("/api/articles/"))
+		) {
+			let preview = configuredPreviews.get(site.id);
+			if (!preview) {
+				preview = createConfiguredLocalPreview(site);
+				configuredPreviews.set(site.id, preview);
+			}
+			return preview(request, capabilities);
+		}
+	}
 	if (url.pathname === "/api/images/upload" && request.method === "POST") {
 		if (!capabilities.imageBedUpload) return disabledCapabilityResponse();
 		return jsonResponse(

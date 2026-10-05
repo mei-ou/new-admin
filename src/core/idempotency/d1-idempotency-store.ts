@@ -10,7 +10,7 @@ import type {
 const recoverySchema = z
 	.object({
 		kind: z.enum(["article-create", "article-update", "article-delete"]),
-		storageSlug: z.string().min(1).max(120),
+		storageSlug: z.string().min(1).max(200),
 	})
 	.strict();
 

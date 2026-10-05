@@ -9,6 +9,7 @@ import type { EditorView } from "@milkdown/kit/prose/view";
 import { onMount } from "svelte";
 import type { VisualEditorCommand } from "../../types";
 import type { BridgeProjection, BridgeSourceNodeMetadata } from "./bridge";
+import { createVisualTextReplacement, readVisualSelection } from "./selection";
 
 interface Selection {
 	from: number;
@@ -70,13 +71,7 @@ let mountGeneration = 0;
 
 function editorSelection(): Selection {
 	if (!editorView) return { from: 0, to: 0, text: "" };
-	const selection = editorView.state.selection.main;
-	const doc = editorView.state.doc;
-	return {
-		from: selection.from,
-		to: selection.to,
-		text: doc.textBetween(selection.from, selection.to, "\n"),
-	};
+	return readVisualSelection(editorView.state);
 }
 
 function replaceRange(
@@ -87,21 +82,8 @@ function replaceRange(
 	selectionTo = selectionFrom,
 ): void {
 	if (!editorView) return;
-	const docLength = editorView.state.doc.content.size;
-	const safeFrom = Math.max(0, Math.min(from, docLength));
-	const safeTo = Math.max(safeFrom, Math.min(to, docLength));
-	const transaction = editorView.state.tr.insertText(text, safeFrom, safeTo);
-	const selectionConstructor = editorView.state.selection.constructor as unknown as {
-		create(doc: unknown, anchor: number, head: number): unknown;
-	};
 	editorView.dispatch(
-		transaction.setSelection(
-			selectionConstructor.create(
-				editorView.state.doc,
-				safeFrom + selectionFrom,
-				safeFrom + selectionTo,
-			),
-		),
+		createVisualTextReplacement(editorView.state, text, from, to, selectionFrom, selectionTo),
 	);
 	editorView.focus();
 }
