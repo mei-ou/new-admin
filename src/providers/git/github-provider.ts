@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ApiError } from "../../core/http/errors";
+import { type StorageIdPolicy, validateUnicodeSegment } from "../../utils/slug-utils";
 import type {
 	AtomicGitCommitInput,
 	AtomicGitCommitResult,
@@ -96,6 +97,7 @@ export interface GitHubProviderConfig {
 	repo: string;
 	branch: string;
 	token: string;
+	filenamePolicy?: StorageIdPolicy;
 }
 
 export interface GitHubProviderDependencies {
@@ -162,7 +164,10 @@ function parseBranch(value: string): string {
  * 路径只接受已经由服务端策略生成的仓库相对路径。这里再次验证是纵深防御，避免未来
  * 其他模块绕过文章路径构造器后把 Contents API 变成任意仓库文件读写接口。
  */
-function parseRepositoryPath(value: string): string {
+function parseRepositoryPath(
+	value: string,
+	filenamePolicy: StorageIdPolicy = "ascii-slug",
+): string {
 	if (
 		value.length === 0 ||
 		value.length > 512 ||
@@ -181,7 +186,11 @@ function parseRepositoryPath(value: string): string {
 	if (
 		segments.some(
 			(segment) =>
-				segment === "." || segment === ".." || !SAFE_REPOSITORY_PATH_SEGMENT.test(segment),
+				segment === "." ||
+				segment === ".." ||
+				(filenamePolicy === "unicode"
+					? !validateUnicodeSegment(segment).valid
+					: !SAFE_REPOSITORY_PATH_SEGMENT.test(segment)),
 		)
 	) {
 		throw new TypeError("GitHub 仓库路径无效。");
@@ -191,8 +200,8 @@ function parseRepositoryPath(value: string): string {
 }
 
 /** 仓库浏览器可以从根目录开始，但文件读取和写入仍必须使用非空路径。 */
-function parseDirectoryPath(value: string): string {
-	return value === "" ? "" : parseRepositoryPath(value);
+function parseDirectoryPath(value: string, filenamePolicy: StorageIdPolicy): string {
+	return value === "" ? "" : parseRepositoryPath(value, filenamePolicy);
 }
 
 function parseCommitMessage(value: string): string {
@@ -226,13 +235,16 @@ type ParsedAtomicFile =
 	| { operation: "delete"; path: string; expectedSha: string }
 	| { operation: "reuse"; path: string; expectedSha: null; fileSha: string };
 
-function parseAtomicFiles(input: AtomicGitCommitInput["files"]): ParsedAtomicFile[] {
+function parseAtomicFiles(
+	input: AtomicGitCommitInput["files"],
+	filenamePolicy: StorageIdPolicy,
+): ParsedAtomicFile[] {
 	if (input.length === 0 || input.length > MAX_ATOMIC_FILES) {
 		throw new TypeError("原子提交文件数量无效。");
 	}
 	const seenPaths = new Set<string>();
 	return input.map((file) => {
-		const path = parseRepositoryPath(file.path);
+		const path = parseRepositoryPath(file.path, filenamePolicy);
 		if (seenPaths.has(path)) throw new TypeError("原子提交包含重复路径。");
 		seenPaths.add(path);
 		if (file.operation === "delete") {
@@ -329,11 +341,18 @@ export class GitHubProvider implements GitProvider {
 	readonly #branch: string;
 	readonly #authorization: string;
 	readonly #fetch: typeof fetch;
+	readonly #filenamePolicy: StorageIdPolicy;
 
 	constructor(config: GitHubProviderConfig, dependencies: GitHubProviderDependencies = {}) {
 		this.#owner = parseRepositoryName(config.owner, "GitHub Owner");
 		this.#repo = parseRepositoryName(config.repo, "GitHub Repo");
 		this.#branch = parseBranch(config.branch);
+		if (
+			config.filenamePolicy !== undefined &&
+			!["ascii-slug", "unicode"].includes(config.filenamePolicy)
+		)
+			throw new TypeError("GitHub 文件名策略无效。");
+		this.#filenamePolicy = config.filenamePolicy ?? "ascii-slug";
 		if (config.token.length === 0 || containsControlCharacter(config.token)) {
 			throw new TypeError("GitHub Token 配置无效。");
 		}
@@ -353,7 +372,7 @@ export class GitHubProvider implements GitProvider {
 	}
 
 	async #listDirectoryAtRef(pathInput: string, ref: string): Promise<GitDirectoryEntry[]> {
-		const path = parseDirectoryPath(pathInput);
+		const path = parseDirectoryPath(pathInput, this.#filenamePolicy);
 		const response = await this.#requestApi(this.#contentsApiPath(path, ref), { method: "GET" });
 		const body = await readResponseBody(response);
 		if (!response.ok) {
@@ -372,8 +391,8 @@ export class GitHubProvider implements GitProvider {
 			let normalizedName: string;
 			let normalizedPath: string;
 			try {
-				normalizedName = parseRepositoryPath(entry.name);
-				normalizedPath = parseRepositoryPath(entry.path);
+				normalizedName = parseRepositoryPath(entry.name, this.#filenamePolicy);
+				normalizedPath = parseRepositoryPath(entry.path, this.#filenamePolicy);
 			} catch {
 				throw new ApiError(502, "UPSTREAM_ERROR", "Git 服务返回了无效响应。");
 			}
@@ -408,7 +427,7 @@ export class GitHubProvider implements GitProvider {
 	}
 
 	async #getFileAtRef(pathInput: string, ref: string): Promise<GitRepositoryFile> {
-		const path = parseRepositoryPath(pathInput);
+		const path = parseRepositoryPath(pathInput, this.#filenamePolicy);
 		const response = await this.#requestApi(this.#contentsApiPath(path, ref), { method: "GET" });
 		const body = await readResponseBody(response);
 		if (!response.ok) {
@@ -454,7 +473,7 @@ export class GitHubProvider implements GitProvider {
 	async commitFilesAtomically(input: AtomicGitCommitInput): Promise<AtomicGitCommitResult> {
 		const expectedHeadSha = parseGitObjectSha(input.expectedHeadSha);
 		const message = parseCommitMessage(input.message);
-		const files = parseAtomicFiles(input.files);
+		const files = parseAtomicFiles(input.files, this.#filenamePolicy);
 		const head = await this.getHead();
 		if (head.commitSha !== expectedHeadSha) {
 			throw new ApiError(409, "CONFLICT", "远端分支已经变化，请重新加载后再提交。");
@@ -593,7 +612,7 @@ export class GitHubProvider implements GitProvider {
 		content: string,
 		expectedSha?: string,
 	): Promise<GitCommitResult> {
-		const path = parseRepositoryPath(pathInput);
+		const path = parseRepositoryPath(pathInput, this.#filenamePolicy);
 		const payload: Record<string, string> = {
 			message: parseCommitMessage(messageInput),
 			content,

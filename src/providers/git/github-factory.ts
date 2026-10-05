@@ -39,6 +39,7 @@ export function createGitHubRepositoryFactory(
 						repo: config.repo,
 						branch: config.branch,
 						token: config.token,
+						filenamePolicy: config.filenamePolicy ?? "ascii-slug",
 					},
 					dependencies,
 				),
