@@ -18,7 +18,7 @@
 		"ACCESS_ALLOWED_SUBJECTS": "",
 		"GITHUB_OWNER": "mei-ou",
 		"GITHUB_REPO": "newfirefly",
-		"GITHUB_BRANCH": "test",
+		"GITHUB_BRANCH": "main",
 		"GITHUB_CONTENT_ROOT": "src/content/posts",
 		"PUBLIC_ARTICLE_URL_TEMPLATE": "",
 		"PUBLIC_IMGBED_URL": "https://pic.narciranran.buzz/",
