@@ -219,7 +219,7 @@ function createSourceNodeView(): NodeViewConstructor {
 		const sourceDescription =
 			sourceAttrs.category === "opaque"
 				? "未知语法保持原始字节，不执行也不改写。"
-				: "特殊语法只显示源码保真占位，修改请进入 Markdown 源码模式。";
+				: "特殊语法仅显示源码保真占位，不执行内容；查看源码可定位原文。";
 
 		const render = (): void => {
 			dom.dataset.category = sourceAttrs.category;

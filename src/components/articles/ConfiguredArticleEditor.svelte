@@ -27,6 +27,9 @@ import {
 } from "./editor-commands";
 import ImageDialog from "./ImageDialog.svelte";
 import { uploadImageBedImage } from "./imagebed-client";
+import SpecialBlockDialog from "./SpecialBlockDialog.svelte";
+import { insertSpecialBlock, listSpecialBlocks, readSpecialBlock, replaceSpecialBlock, SPECIAL_BLOCK_LABELS, type SpecialBlockFields } from "./special-block-state";
+import type { MarkdownSourcePlaceholderNode } from "../../modules/markdown-codec/types";
 
 interface Props {
 	mode: "create" | "edit";
@@ -53,6 +56,13 @@ let message = $state("");
 let source = $state(false);
 let dirty = $state(false);
 let imageOpen = $state(false);
+let specialFields = $state<SpecialBlockFields>();
+let specialTarget = $state<MarkdownSourcePlaceholderNode>();
+let specialSnapshot = "";
+let specialInsertion = { from: 0, to: 0 };
+let editorRevision = $state(0);
+let pendingSourcePosition: number | undefined;
+const specialBlocks = $derived(listSpecialBlocks(markdown));
 let visual = $state<MilkdownEditorHandle>();
 let code = $state<CodeMirrorEditorHandle>();
 let savedSelection: { from: number; to: number; text: string } | undefined;
@@ -69,6 +79,7 @@ let locked = $derived(
 		busy ||
 		uploading ||
 		imageOpen ||
+		specialFields !== undefined ||
 		pending !== undefined ||
 		(mode === "edit" && !fileSha),
 );
@@ -121,6 +132,62 @@ function format(command: InlineMarkdownCommand | BlockMarkdownCommand, inline = 
 function switchMode() {
 	if (!source && visual) markdown = visual.flush();
 	source = !source;
+}
+function openSpecialBlock(index?: number) {
+	if (locked) return;
+	try {
+		if (!source && visual) markdown = visual.flush();
+		specialSnapshot = markdown;
+		specialTarget = index === undefined ? undefined : listSpecialBlocks(markdown)[index];
+		if (index !== undefined && !specialTarget) throw new Error("正文已变化，请重新选择特殊块。");
+		specialInsertion = source ? selection() : { from: markdown.length, to: markdown.length };
+		specialFields = readSpecialBlock(specialTarget);
+	} catch (error) { message = String(error); }
+}
+function saveSpecialBlock(replacement: string) {
+	if (markdown !== specialSnapshot) throw new Error("正文已变化，请关闭并重新打开特殊块。");
+	const next = specialTarget
+		? replaceSpecialBlock(markdown, specialTarget, replacement)
+		: insertSpecialBlock(markdown, specialInsertion.from, specialInsertion.to, replacement);
+	if (source && code) {
+		const range = specialTarget?.range ?? specialInsertion;
+		code.replaceRange(specialTarget ? replacement : `\n\n${replacement}\n\n`, range.from, range.to);
+	} else {
+		markdown = next;
+		editorRevision += 1;
+	}
+	dirty = true;
+	specialFields = undefined;
+}
+async function showBlockSource(from: number) {
+	if (locked) return;
+	try {
+		if (!source && visual) markdown = visual.flush();
+		pendingSourcePosition = from;
+		source = true;
+		await tick();
+		if (code) focusBlockSource(code);
+	} catch (error) { message = String(error); }
+}
+function focusBlockSource(handle: CodeMirrorEditorHandle) {
+	if (pendingSourcePosition === undefined) return;
+	const from = pendingSourcePosition;
+	pendingSourcePosition = undefined;
+	handle.replaceRange("", from, from);
+	handle.focus();
+}
+function insertBlankLine() {
+	if (locked) return;
+	try {
+		if (source) {
+			code?.replaceSelection("\n\n<br />\n\n");
+		} else if (!visual?.replaceMarkdown("<br />\n\n<br />")) {
+			throw new Error("请将光标放在普通正文段落中再插入空白行。");
+		}
+		dirty = true;
+	} catch (error) {
+		message = String(error);
+	}
 }
 function openImage() {
 	savedSelection = selection();
@@ -392,10 +459,17 @@ onDestroy(() => controller.abort());
  </fieldset>
  <section class="body-panel" aria-label="正文编辑">
  <div class="panel-heading"><div><h2>正文</h2><p>直接输入并排版，也可以粘贴或拖入图片。</p></div><button class="action-button secondary mode-switch" disabled={locked} onclick={switchMode}>{source ? "切换可视化编辑" : "切换 Markdown 源码"}</button></div>
- <EditorToolbar disabled={locked} specialDisabled={true} showLink={false} showImage={capabilities.imageBedUpload || capabilities.externalHttpsLinks} oninline={(command) => format(command, true)} onblock={(command) => format(command)} onheading={(command) => format(command)} onlink={() => undefined} onimage={openImage} onundo={() => (source ? code : visual)?.undo()} onredo={() => (source ? code : visual)?.redo()} onspecial={() => undefined} />
+ <EditorToolbar disabled={locked} showLink={false} showImage={capabilities.imageBedUpload || capabilities.externalHttpsLinks} oninline={(command) => format(command, true)} onblock={(command) => format(command)} onheading={(command) => format(command)} onlink={() => undefined} onimage={openImage} onundo={() => (source ? code : visual)?.undo()} onredo={() => (source ? code : visual)?.redo()} onspecial={() => openSpecialBlock()} />
+ <p class="field-hint">特殊块可通过表单填写；可视化模式新增到正文末尾，源码模式插入到光标位置。</p>
+ {#if specialBlocks.length}<div class="special-blocks" aria-label="已有特殊块">{#each specialBlocks as block, index}<button class="action-button secondary" disabled={locked} onclick={() => openSpecialBlock(index)}>编辑{SPECIAL_BLOCK_LABELS[block.kind]}：{String(block.metadata?.title ?? block.metadata?.summary ?? block.metadata?.videoId ?? `第 ${index + 1} 块`)}</button>{/each}</div>{/if}
+ <div class="spacing-tools"><button class="action-button secondary" disabled={locked} onclick={insertBlankLine}>插入空白行</button><p>可视化模式可连续按 Enter 留白；源码里的普通空行只分隔段落，需要显示留白时用此按钮。</p></div>
  <div class="editor-workspace" role="group" aria-label="文章正文" onpastecapture={pasted} ondropcapture={dropped} ondragover={(event) => { if (capabilities.imageBedUpload && !locked && event.dataTransfer?.types.includes("Files")) event.preventDefault(); }}>
-  {#if source}<CodeMirrorEditor value={markdown} disabled={locked} onchange={updateMarkdown} onready={(handle) => code = handle} ondispose={() => code = undefined} />
-  {:else}<MilkdownEditor value={markdown} disabled={locked} onchange={updateMarkdown} onready={(handle) => visual = handle} ondispose={() => visual = undefined} onerror={(error) => message = error} />{/if}
+  {#if loading}<p role="status">正在读取文章正文…</p>{:else}
+  {#key editorRevision}
+  {#if source}<CodeMirrorEditor value={markdown} disabled={locked} onchange={updateMarkdown} onready={(handle) => { code = handle; focusBlockSource(handle); }} ondispose={() => code = undefined} />
+  {:else}<MilkdownEditor value={markdown} disabled={locked} onchange={updateMarkdown} onready={(handle) => visual = handle} ondispose={() => visual = undefined} onerror={(error) => message = error} onsource={(from) => { void showBlockSource(from); }} />{/if}
+  {/key}
+  {/if}
  </div>
  </section>
  <div class="actions">
@@ -406,6 +480,7 @@ onDestroy(() => controller.abort());
   {#if mode === "edit" && capabilities.articleDelete}<button class="action-button danger" disabled={locked} onclick={() => submit("draft", true)}>删除文章</button>{/if}</div>
  </div>
  <ImageDialog open={imageOpen} capabilities={mediaCapabilities} {mode} storageSlug={storageId} onclose={() => imageOpen = false} oninsert={insertImage} />
+ {#if specialFields}<SpecialBlockDialog fields={specialFields} editing={specialTarget !== undefined} onsave={saveSpecialBlock} onclose={() => specialFields = undefined} />{/if}
 </section>
 
 {#snippet renderField(field: EditorFieldConfig)}
@@ -422,6 +497,9 @@ onDestroy(() => controller.abort());
 {/snippet}
 
 <style>
+ .special-blocks { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+	.spacing-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 0.75rem; padding: 0.75rem 0; }
+	.spacing-tools p { flex: 1; min-width: 12rem; margin: 0; color: var(--text-secondary); font-size: 0.8rem; }
  .configured-editor { display: grid; min-width: 0; gap: 1.25rem; font-size: 0.875rem; }
  .back-link { justify-self: start; color: var(--text-secondary); font-size: 0.8rem; text-decoration: none; }
  .back-link:hover { color: var(--brand); }

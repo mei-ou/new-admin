@@ -64,6 +64,7 @@ let parser: ((markdown: string) => Node) | undefined;
 let flushCurrent: (() => string) | undefined;
 let bridge: typeof import("./bridge") | undefined;
 let projection: BridgeProjection | undefined;
+let sourceRemarkOptions: { projection: BridgeProjection["visualProjection"] } | undefined;
 let currentSource = "";
 let syncingExternal = false;
 let mounted = false;
@@ -119,11 +120,17 @@ function selectionTouchesProtectedNode(): boolean {
 }
 
 function markdownFragment(markdown: string): Fragment | undefined {
-	if (!parser) return undefined;
-	const parsed = parser(markdown);
-	const first = parsed.firstChild;
-	if (parsed.childCount === 1 && first?.type.name === "paragraph") return first.content;
-	return parsed.content;
+	if (!parser || !bridge || !sourceRemarkOptions) return undefined;
+	const previousProjection = sourceRemarkOptions.projection;
+	try {
+		sourceRemarkOptions.projection = bridge.projectCodecToMilkdownMarkdown(markdown).visualProjection;
+		const parsed = parser(markdown);
+		const first = parsed.firstChild;
+		if (parsed.childCount === 1 && first?.type.name === "paragraph") return first.content;
+		return parsed.content;
+	} finally {
+		sourceRemarkOptions.projection = previousProjection;
+	}
 }
 
 function replaceMarkdown(markdown: string, from?: number, to?: number): boolean {
@@ -290,6 +297,8 @@ async function mountEditor(): Promise<void> {
 		projection = bridgeModule.projectCodecToMilkdownMarkdown(value);
 		currentSource = value;
 		const initialProjection = projection;
+		const remarkOptions = { projection: initialProjection.visualProjection };
+		sourceRemarkOptions = remarkOptions;
 		let editorReady = false;
 		const created = core.Editor.make()
 			.config((ctx) => {
@@ -299,7 +308,7 @@ async function mountEditor(): Promise<void> {
 					...plugins,
 					{
 						plugin: sourceNodeModule.fireflySourceRemarkPlugin,
-						options: { projection: initialProjection.visualProjection },
+						options: remarkOptions,
 					},
 				]);
 				ctx.get(listenerModule.listenerCtx).markdownUpdated((_, markdown) => {
@@ -382,6 +391,7 @@ onMount(() => {
 		editorView = null;
 		flushCurrent = undefined;
 		bridge = undefined;
+		sourceRemarkOptions = undefined;
 		if (currentEditor) void currentEditor.destroy(true);
 		ondispose?.();
 	};
@@ -389,11 +399,13 @@ onMount(() => {
 
 $effect(() => {
 	const nextValue = value;
-	if (!editor || !editorView || !projection || !parser || !bridge || nextValue === currentSource)
+	if (!editor || !editorView || !projection || !parser || !bridge || !sourceRemarkOptions || nextValue === currentSource)
 		return;
+	const previousRemarkProjection = sourceRemarkOptions.projection;
 	try {
 		const nextProjection = bridge.projectCodecToMilkdownMarkdown(nextValue);
-		const parsed = parser(nextValue);
+		sourceRemarkOptions.projection = nextProjection.visualProjection;
+		const parsed = parser(nextProjection.markdown);
 		syncingExternal = true;
 		try {
 			const transaction = editorView.state.tr.replaceWith(
@@ -409,6 +421,7 @@ $effect(() => {
 			syncingExternal = false;
 		}
 	} catch (error) {
+		sourceRemarkOptions.projection = previousRemarkProjection;
 		flushError = error instanceof Error ? error.message : "外部 Markdown 无法加载到画布。";
 	}
 });

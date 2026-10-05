@@ -5,9 +5,63 @@ import {
 	flushMilkdownMarkdown,
 	projectCodecToMilkdownMarkdown,
 } from "../../src/modules/editor-core/adapters/milkdown/bridge";
-import { transformFireflySourceAst } from "../../src/modules/editor-core/adapters/milkdown/firefly-source-node";
+import {
+	fireflySourceRemarkPlugin,
+	transformFireflySourceAst,
+} from "../../src/modules/editor-core/adapters/milkdown/firefly-source-node";
 
 describe("隔离 Milkdown bridge source transaction", () => {
+	it("异步正文和插入片段使用各自的最新占位映射", () => {
+		const options = { projection: projectCodecToMilkdownMarkdown("").visualProjection };
+		const transform = fireflySourceRemarkPlugin.call({} as never, options);
+		if (typeof transform !== "function") throw new Error("缺少 remark transform");
+		const source = "> [!NOTE] 标题\n> 异步加载正文\n";
+		options.projection = projectCodecToMilkdownMarkdown(source).visualProjection;
+		const root = {
+			type: "root",
+			children: [
+				{ type: "blockquote", position: { start: { offset: 0 }, end: { offset: source.length } } },
+			],
+		};
+		transform(root as never, {} as never, () => undefined);
+		expect(root.children[0]?.type).toBe("fireflySourceBlock");
+		expect((root.children[0] as { data?: Record<string, unknown> }).data?.sourceSlice).toBe(source);
+		options.projection = projectCodecToMilkdownMarkdown("普通插入正文").visualProjection;
+		const fragment = {
+			type: "root",
+			children: [{ type: "paragraph", position: { start: { offset: 0 }, end: { offset: 6 } } }],
+		};
+		transform(fragment as never, {} as never, () => undefined);
+		expect(fragment.children[0]?.type).toBe("paragraph");
+	});
+	it("连续 Enter 的空段落不属于受保护 HTML，可以添加和删除", () => {
+		const original = projectCodecToMilkdownMarkdown("正文\n");
+		const blankLines = "正文\n\n<br />\n\n<br />\n\n尾文\n";
+		const edited = flushMilkdownMarkdown(original, blankLines);
+		expect(edited.source).toBe(blankLines);
+		expect(edited.opaqueCount).toBe(0);
+		expect(flushMilkdownMarkdown(edited, "正文\n\n尾文\n").source).toBe("正文\n\n尾文\n");
+	});
+	it("仅纯 br 行可编辑，不放开属性、脚本或任意 HTML", () => {
+		for (const source of [
+			"<br onclick=alert(1)>\n",
+			"<br style=position:fixed>\n",
+			"<script>alert(1)</script>\n",
+			"<div>原文</div>\n",
+		]) {
+			const protectedBlock = projectCodecToMilkdownMarkdown(source);
+			expect(protectedBlock.opaqueCount).toBeGreaterThan(0);
+			expect(() => flushMilkdownMarkdown(protectedBlock, "<br />\n")).toThrow(
+				"protected source slice",
+			);
+		}
+	});
+	it("特殊块内容不变时，可以在前后增加显式空白行", () => {
+		const source = "正文\n\n<details>\n<summary>标题</summary>\n\n内容\n</details>\n";
+		const original = projectCodecToMilkdownMarkdown(source);
+		const updated = source.replace("正文\n", "正文\n\n<br />\n");
+		expect(flushMilkdownMarkdown(original, updated).source).toBe(updated);
+	});
 	it("消费 editor-core projection 并保留原始 source metadata", () => {
 		const source = "普通正文\n\n$E=mc^2$\n\n<div>opaque</div>";
 		const projection = projectCodecToMilkdownMarkdown(source);

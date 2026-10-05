@@ -422,6 +422,13 @@ export function parseMarkdownDocument(
 			continue;
 		}
 
+		if (/^ {0,3}<br\s*\/?>[ \t]*$/i.test(lineText)) {
+			appendTextNode(source, line.range, nodes, "paragraph");
+			currentOffset = line.range.to;
+			lineIndex += 1;
+			continue;
+		}
+
 		if (isRawHtmlCandidate(lineText)) {
 			const endIndex = findRawHtmlEnd(lines, lineIndex);
 			const candidateRange = getCandidateRange(lines, lineIndex, endIndex);
