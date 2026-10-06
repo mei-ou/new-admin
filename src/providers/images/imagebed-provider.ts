@@ -69,9 +69,17 @@ export async function uploadImageToImageBed(
 			method: "POST",
 			headers: { Authorization: `Bearer ${config.token}` },
 			body,
-			redirect: "error",
+			redirect: "manual",
 			signal: AbortSignal.timeout(30_000),
 		});
+		if (response.status >= 300 && response.status < 400) {
+			await response.body?.cancel().catch(() => undefined);
+			throw new ApiError(
+				502,
+				"UPSTREAM_ERROR",
+				`图床上传接口返回 HTTP ${response.status} 重定向，后台已拒绝跟随以保护 Token；请检查图床地址、登录跳转和前置访问验证。`,
+			);
+		}
 		if (!response.ok) {
 			await response.body?.cancel().catch(() => undefined);
 			const reason =

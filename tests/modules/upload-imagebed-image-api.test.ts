@@ -62,7 +62,7 @@ describe("图床上传 API", () => {
 			"https://pic.example.com/upload?returnFormat=default&uploadFolder=blog",
 		);
 		expect(options?.headers).toEqual({ Authorization: "Bearer test-only-token" });
-		expect(options?.redirect).toBe("error");
+		expect(options?.redirect).toBe("manual");
 		if (!(options?.body instanceof FormData)) throw new Error("未发送上传表单。");
 		const upload = options.body.get("file") as File;
 		expect(upload.name).toMatch(/^[a-f0-9-]+\.png$/);

@@ -49,6 +49,8 @@ pnpm exec wrangler secret put IMAGEBED_API_TOKEN --config wrangler.jsonc
 
 ### 2026-10-06 上传故障诊断
 
+Cloudflare workerd 实测不支持 Request 的 redirect=error，该值会在发送上传之前抛出 Invalid redirect value，导致请求阶段失败。已改为 redirect=manual，并显式拒绝全部 3xx 响应，不跟随重定向，不暴露 Location 或向跳转目标发送 Token。Node 的模拟 fetch 原先未覆盖这一运行时差异；修复需部署后再验证真实图床上传。
+
 上传提示现可区分：上游 HTTP 错误（包括 401、403、413、429）、30 秒超时、网络/TLS/重定向失败、响应体读取或大小异常、非 JSON、缺少 src、链接安全校验失败。保持现有 UPSTREAM_ERROR 错误码和 HTTP 502，现有编辑器直接显示安全提示，不打印原始异常或图床响应正文。403 和网络类提示只提供排查方向，不能据此断定唯一原因。
 
 使用 WebDAV 时，博客后台运行环境应明确配置 IMAGEBED_UPLOAD_CHANNEL=webdav。IMAGEBED_API_TOKEN 填写原始 Token，不加 Bearer 前缀；请求头由后台生成。超时或返回链接异常不代表文件一定未保存，重试前应检查图床列表和存储。此次仅本地代码与模拟测试，尚未推送、部署或用真实 Token 上传。

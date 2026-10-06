@@ -115,6 +115,24 @@ describe("图床 Provider", () => {
 		});
 	});
 
+	it.each([301, 302, 303, 307, 308])(
+		"拒绝跟随 HTTP %s 重定向，不泄露目标或 Token",
+		async (status) => {
+			const fetcher = vi.fn<typeof fetch>().mockResolvedValue(
+				new Response(config.token, {
+					status,
+					headers: { Location: `https://other.example/${config.token}` },
+				}),
+			);
+			const failure = await uploadImageToImageBed(file, config, fetcher).catch((error) => error);
+			expect(failure).toMatchObject({ status: 502, message: expect.stringContaining("重定向") });
+			expect(failure.message).not.toContain(config.token);
+			expect(failure.message).not.toContain("other.example");
+			expect(fetcher).toHaveBeenCalledTimes(1);
+			expect(fetcher.mock.calls[0]?.[1]?.redirect).toBe("manual");
+		},
+	);
+
 	it.each([
 		[new Error(config.token), "响应读取失败"],
 		[new DOMException(config.token, "TimeoutError"), "超过 30 秒"],
