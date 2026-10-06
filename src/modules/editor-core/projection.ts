@@ -41,6 +41,7 @@ export interface EditorVisualProjection {
 }
 
 const PLACEHOLDER_LABELS: Record<MarkdownSourcePlaceholderKind, string> = {
+	"wiki-link": "Wiki Link source placeholder",
 	callout: "Callout source placeholder",
 	details: "Details source placeholder",
 	"math-block": "Math source placeholder",

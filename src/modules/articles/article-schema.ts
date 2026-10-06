@@ -5,6 +5,7 @@ import { fireflyPostsType } from "../../sites/firefly";
 import type { ContentTypeConfig } from "../../sites/types";
 import { getFieldKeys } from "../../sites/types";
 import type { ArticleEditorInput, ArticleFrontmatter } from "../../types/article";
+import type { StorageIdPolicy } from "../../utils/slug-utils";
 
 /**
  * 按内容类型构建可写 Frontmatter Schema。
@@ -53,6 +54,7 @@ export function buildArticleEditorInputSchema(contentType: ContentTypeConfig) {
  * 隐式路径；即便传错，严格 schema 也会直接解析失败（失败关闭），而不是静默接受字段错位的文章。
  */
 export interface FrontmatterCodec {
+	readonly slugPolicy?: StorageIdPolicy;
 	readonly preserveUnknownFrontmatter?: boolean;
 	/** 服务端权威校验 schema，由内容类型的字段定义派生。 */
 	readonly schema: z.ZodType<ArticleFrontmatter>;
@@ -80,6 +82,7 @@ export interface FrontmatterCodec {
  */
 export function createFrontmatterCodec(contentType: ContentTypeConfig): FrontmatterCodec {
 	return {
+		...(contentType.filenamePolicy === "unicode" ? { slugPolicy: "unicode" as const } : {}),
 		...(contentType.preserveUnknownFrontmatter ? { preserveUnknownFrontmatter: true } : {}),
 		schema: buildArticleFrontmatterSchema(contentType),
 		knownKeys: getFieldKeys(contentType),

@@ -3,6 +3,8 @@ import {
 	flushBridgeNodeViewMetadata,
 	flushBridgeProjection,
 	flushMilkdownMarkdown,
+	flushValidatedHistory,
+	flushWikiLinkInsertion,
 	projectCodecToMilkdownMarkdown,
 } from "../../src/modules/editor-core/adapters/milkdown/bridge";
 import {
@@ -11,6 +13,24 @@ import {
 } from "../../src/modules/editor-core/adapters/milkdown/firefly-source-node";
 
 describe("隔离 Milkdown bridge source transaction", () => {
+	it("Wiki 撤销与重做仅接受曾验证的保护签名", () => {
+		const original = projectCodecToMilkdownMarkdown("> [!NOTE] 保留\n> 内容\n\n正文\n");
+		const inserted = flushWikiLinkInsertion(
+			original,
+			`${original.source}\n[[指南/文章|测试]]\n`,
+			"[[指南/文章|测试]]",
+		);
+		expect(flushValidatedHistory([original, inserted], original.source).source).toBe(
+			original.source,
+		);
+		expect(flushValidatedHistory([original, inserted], inserted.source).source).toBe(
+			inserted.source,
+		);
+		expect(() => flushValidatedHistory([original, inserted], "正文\n")).toThrow();
+		expect(() =>
+			flushValidatedHistory([original, inserted], `${original.source}\n[[其他/链接]]\n`),
+		).toThrow();
+	});
 	it("异步正文和插入片段使用各自的最新占位映射", () => {
 		const options = { projection: projectCodecToMilkdownMarkdown("").visualProjection };
 		const transform = fireflySourceRemarkPlugin.call({} as never, options);

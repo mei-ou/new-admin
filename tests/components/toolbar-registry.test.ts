@@ -16,12 +16,10 @@ describe("编辑器工具栏注册表", () => {
 		}
 	});
 
-	it("链接和图片始终位于插入组", () => {
-		expect(getToolbarCommands("insert").map((command) => command.id)).toEqual([
-			"link",
-			"image",
-			"divider",
-		]);
+	it("链接位于删除线之后，图片保留在插入组", () => {
+		const inline = getToolbarCommands("inline").map((command) => command.id);
+		expect(inline[inline.indexOf("strikethrough") + 1]).toBe("link");
+		expect(getToolbarCommands("insert").map((command) => command.id)).toEqual(["image", "divider"]);
 	});
 
 	it("不注册被 Firefly 语法证据阻断的样式命令", () => {

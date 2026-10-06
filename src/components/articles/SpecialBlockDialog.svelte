@@ -55,7 +55,7 @@ function save() {
 
 <style>
  dialog::backdrop { background: #0006; }
- dialog { width: min(calc(100% - 2rem), 36rem); max-height: calc(100dvh - 2rem); overflow: auto; box-sizing: border-box; padding: 1.5rem; border: 0; border-radius: 1rem; background: var(--surface, white); color: var(--text-primary); box-shadow: var(--shadow-sm); }
+ dialog { position: fixed; inset: 0; margin: auto; width: min(calc(100% - 2rem), 36rem); max-width: calc(100% - 2rem); max-height: calc(100dvh - 2rem); overflow: auto; overscroll-behavior: contain; box-sizing: border-box; padding: 1.5rem; border: 0; border-radius: 1rem; background: var(--surface, white); color: var(--text-primary); box-shadow: var(--shadow-sm); overflow-wrap: anywhere; }
  h2 { margin: 0 0 0.75rem; }
  p { color: var(--text-secondary); font-size: 0.85rem; line-height: 1.6; }
  form { display: grid; gap: 0.6rem; }
@@ -68,4 +68,5 @@ function save() {
  button { padding: 0.6rem 1rem; border: 1px solid var(--border, #ddd); border-radius: 0.5rem; background: var(--surface, white); color: var(--text-primary); font: inherit; cursor: pointer; }
  button[type="submit"] { background: var(--brand, #2563eb); color: white; }
  .error { color: #b91c1c; }
+ @media (max-width: 600px) { dialog { padding: 1rem; } .actions button { flex: 1; min-height: 2.75rem; } }
 </style>

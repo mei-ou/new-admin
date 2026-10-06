@@ -22,13 +22,15 @@ export interface SpecialBlockFields {
 	videoId: string;
 }
 
-export function listSpecialBlocks(source: string): MarkdownSourcePlaceholderNode[] {
+export type SpecialBlockNode = MarkdownSourcePlaceholderNode & { kind: SpecialBlockKind };
+export function listSpecialBlocks(source: string): SpecialBlockNode[] {
 	return parseMarkdownDocument(source).document.nodes.filter(
-		(node): node is MarkdownSourcePlaceholderNode => node.category === "source-placeholder",
+		(node): node is SpecialBlockNode =>
+			node.category === "source-placeholder" && node.kind in SPECIAL_BLOCK_LABELS,
 	);
 }
 
-export function readSpecialBlock(node?: MarkdownSourcePlaceholderNode): SpecialBlockFields {
+export function readSpecialBlock(node?: SpecialBlockNode): SpecialBlockFields {
 	const metadata = node?.metadata ?? {};
 	return {
 		kind: node?.kind ?? "callout",

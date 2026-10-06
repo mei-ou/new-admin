@@ -9,6 +9,7 @@ import {
 	commitArticleDelete,
 	prepareArticleDelete,
 } from "../modules/articles/services/delete-article";
+import { listArticleLinkTargets } from "../modules/articles/services/list-article-link-targets";
 import { listArticles } from "../modules/articles/services/list-articles";
 import { readArticle } from "../modules/articles/services/read-article";
 import { createArticle, updateArticle } from "../modules/articles/services/write-article";
@@ -164,6 +165,20 @@ export function createConfiguredLocalPreview(site: SiteConfig) {
 
 	return async (request: Request, capabilities: AdminCapabilitySnapshot): Promise<Response> => {
 		const url = new URL(request.url);
+		if (url.pathname === "/api/articles/link-targets" && request.method === "GET") {
+			if (!capabilities.articleLinks) throw new ApiError(404, "NOT_FOUND", "站内链接功能未开启。");
+			for (const key of url.searchParams.keys()) {
+				if (key !== "query" || url.searchParams.getAll(key).length !== 1)
+					throw new ApiError(400, "INVALID_REQUEST", "文章链接查询参数无效。");
+			}
+			const query = url.searchParams.get("query") ?? "";
+			if (query.length > 100) throw new ApiError(400, "INVALID_REQUEST", "文章链接查询参数无效。");
+			const targets = await listArticleLinkTargets(
+				{ query },
+				{ gitProvider: provider, pathConfig, codec },
+			);
+			return response({ targets });
+		}
 		if (url.pathname === "/api/articles" && request.method === "GET") {
 			const articles = await listArticles(
 				{

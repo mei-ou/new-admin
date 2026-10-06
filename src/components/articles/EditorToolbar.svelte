@@ -44,12 +44,12 @@ let {
 const groups: ToolbarCommandGroup[] = ["inline", "block", "insert"];
 
 function executeCommand(command: ToolbarCommandDefinition): void {
-	if (command.group === "inline") {
-		oninline(command.id as InlineMarkdownCommand);
-		return;
-	}
 	if (command.id === "link") {
 		onlink();
+		return;
+	}
+	if (command.group === "inline") {
+		oninline(command.id as InlineMarkdownCommand);
 		return;
 	}
 	if (command.id === "image") {
@@ -106,7 +106,7 @@ function executeCommand(command: ToolbarCommandDefinition): void {
 			{/each}
 		</div>
 	{/each}
-	<button class="special-tool" type="button" title="插入特殊块" aria-label="插入特殊块" disabled={specialDisabled} onclick={onspecial}>＋ 特殊块</button>
+	<button class="special-tool" type="button" title="插入特殊块" aria-label="插入特殊块" disabled={disabled || specialDisabled} onclick={onspecial}>＋ 特殊块</button>
 </div>
 
 <style>
@@ -160,7 +160,6 @@ function executeCommand(command: ToolbarCommandDefinition): void {
 	button:hover:not(:disabled), select:hover:not(:disabled) { background: var(--brand-soft); color: var(--brand-strong); }
 	button:focus-visible, select:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
 	button:disabled, select:disabled { cursor: not-allowed; opacity: 0.45; }
-	mark { padding: 0.05rem 0.18rem; border-radius: 0.2rem; background: #fef08a; }
 
 	@media (max-width: 680px) {
 		.editor-toolbar { top: 0.25rem; border-radius: 0; padding-inline: 0.55rem; }

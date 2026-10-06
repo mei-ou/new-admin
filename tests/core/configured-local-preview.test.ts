@@ -45,6 +45,24 @@ async function read(preview: ReturnType<typeof createConfiguredLocalPreview>, id
 	);
 }
 describe("参考版离线预览", () => {
+	it("链接候选使用真实模型，支持中文目录、搜索并执行能力开关", async () => {
+		const preview = createConfiguredLocalPreview(site);
+		const response = await preview(request("/api/articles/link-targets?query=本地"), capabilities);
+		expect(response.status).toBe(200);
+		const payload = (await response.json()) as {
+			targets: { items: { storageSlug: string; href: string }[] };
+		};
+		expect(payload.targets.items.some((item) => item.storageSlug === "博客指南/本地预览文章")).toBe(
+			true,
+		);
+		expect(payload.targets.items[0]?.href).toContain("/posts/");
+		await expect(
+			preview(request("/api/articles/link-targets"), { ...capabilities, articleLinks: false }),
+		).rejects.toMatchObject({ code: "NOT_FOUND" });
+		await expect(
+			preview(request("/api/articles/link-targets?extra=x"), capabilities),
+		).rejects.toMatchObject({ code: "INVALID_REQUEST" });
+	});
 	it("列表和中文分类详情使用真实模型，只提供内存文章", async () => {
 		const preview = createConfiguredLocalPreview(site);
 		const payload = parseArticleListPayload(

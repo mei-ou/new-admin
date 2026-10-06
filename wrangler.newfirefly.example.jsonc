@@ -22,7 +22,7 @@
 		"IMAGEBED_BASE_URL": "https://pic.narciranran.buzz",
 		"IMAGEBED_UPLOAD_FOLDER": "newfirefly-blog",
 		"FEATURE_IMAGEBED_UPLOAD": "true",
-		"FEATURE_ARTICLE_LINKS": "false",
+		"FEATURE_ARTICLE_LINKS": "true",
 		"FEATURE_EXTERNAL_HTTPS_LINKS": "true",
 		"FEATURE_SMALL_IMAGE_UPLOAD": "false",
 		"FEATURE_COVER_MANAGEMENT": "true",

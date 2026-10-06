@@ -41,7 +41,7 @@ export function buildExpectedArticleUrl(
 	slug: string,
 ): string | undefined {
 	if (!template) return undefined;
-	const value = template.replace(PLACEHOLDER, encodeURIComponent(slug));
+	const value = template.replace(PLACEHOLDER, slug.split("/").map(encodeURIComponent).join("/"));
 	const result = z
 		.url()
 		.refine((url) => new URL(url).protocol === "https:")

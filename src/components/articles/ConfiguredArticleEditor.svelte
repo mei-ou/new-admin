@@ -28,8 +28,9 @@ import {
 import ImageDialog from "./ImageDialog.svelte";
 import { uploadImageBedImage } from "./imagebed-client";
 import SpecialBlockDialog from "./SpecialBlockDialog.svelte";
-import { insertSpecialBlock, listSpecialBlocks, readSpecialBlock, replaceSpecialBlock, SPECIAL_BLOCK_LABELS, type SpecialBlockFields } from "./special-block-state";
-import type { MarkdownSourcePlaceholderNode } from "../../modules/markdown-codec/types";
+import ConfiguredLinkDialog from "./ConfiguredLinkDialog.svelte";
+import type { LinkStyle } from "./link-style";
+import { insertSpecialBlock, listSpecialBlocks, readSpecialBlock, replaceSpecialBlock, SPECIAL_BLOCK_LABELS, type SpecialBlockFields, type SpecialBlockNode } from "./special-block-state";
 
 interface Props {
 	mode: "create" | "edit";
@@ -56,8 +57,11 @@ let message = $state("");
 let source = $state(false);
 let dirty = $state(false);
 let imageOpen = $state(false);
+let linkOpen = $state(false);
+let linkSelection = { from: 0, to: 0, text: "" };
+let linkSelectedText = $state("");
 let specialFields = $state<SpecialBlockFields>();
-let specialTarget = $state<MarkdownSourcePlaceholderNode>();
+let specialTarget = $state<SpecialBlockNode>();
 let specialSnapshot = "";
 let specialInsertion = { from: 0, to: 0 };
 let editorRevision = $state(0);
@@ -79,6 +83,7 @@ let locked = $derived(
 		busy ||
 		uploading ||
 		imageOpen ||
+		linkOpen ||
 		specialFields !== undefined ||
 		pending !== undefined ||
 		(mode === "edit" && !fileSha),
@@ -130,8 +135,36 @@ function format(command: InlineMarkdownCommand | BlockMarkdownCommand, inline = 
 	);
 }
 function switchMode() {
-	if (!source && visual) markdown = visual.flush();
+	if (!source && visual) {
+		try { markdown = visual.flush(); }
+		catch {
+			if (!window.confirm("画布内容未通过源码保护校验。是否打开最近一次通过校验的源码？未通过校验的画布修改不会被带入，请先复制需要保留的文字。")) return;
+			message = "已打开最近一次通过校验的源码，请核对正文再保存。";
+		}
+	}
 	source = !source;
+}
+function openLink() {
+	if (locked) return;
+	linkSelection = selection();
+	linkSelectedText = linkSelection.text;
+	linkOpen = true;
+}
+async function insertLink(text: string, style: LinkStyle) {
+	linkOpen = false;
+	await tick();
+	try {
+		if (source) {
+			if (!code) throw new Error("源码编辑器尚未就绪，请重新打开链接窗口。");
+			code.replaceRange(text, linkSelection.from, linkSelection.to);
+		} else {
+			const success = style === "text"
+				? visual?.replaceMarkdown(text, linkSelection.from, linkSelection.to)
+				: visual?.insertWikiLink(text, linkSelection.from, linkSelection.to, style === "card");
+			if (!success) throw new Error("链接未插入，请将光标移到普通正文中重试，或切换源码模式。");
+		}
+		dirty = true;
+	} catch (error) { message = String(error); }
 }
 function openSpecialBlock(index?: number) {
 	if (locked) return;
@@ -459,7 +492,7 @@ onDestroy(() => controller.abort());
  </fieldset>
  <section class="body-panel" aria-label="正文编辑">
  <div class="panel-heading"><div><h2>正文</h2><p>直接输入并排版，也可以粘贴或拖入图片。</p></div><button class="action-button secondary mode-switch" disabled={locked} onclick={switchMode}>{source ? "切换可视化编辑" : "切换 Markdown 源码"}</button></div>
- <EditorToolbar disabled={locked} showLink={false} showImage={capabilities.imageBedUpload || capabilities.externalHttpsLinks} oninline={(command) => format(command, true)} onblock={(command) => format(command)} onheading={(command) => format(command)} onlink={() => undefined} onimage={openImage} onundo={() => (source ? code : visual)?.undo()} onredo={() => (source ? code : visual)?.redo()} onspecial={() => openSpecialBlock()} />
+ <EditorToolbar disabled={locked} showLink={capabilities.articleLinks || capabilities.externalHttpsLinks} showImage={capabilities.imageBedUpload || capabilities.externalHttpsLinks} oninline={(command) => format(command, true)} onblock={(command) => format(command)} onheading={(command) => format(command)} onlink={openLink} onimage={openImage} onundo={() => (source ? code : visual)?.undo()} onredo={() => (source ? code : visual)?.redo()} onspecial={() => openSpecialBlock()} />
  <p class="field-hint">特殊块可通过表单填写；可视化模式新增到正文末尾，源码模式插入到光标位置。</p>
  {#if specialBlocks.length}<div class="special-blocks" aria-label="已有特殊块">{#each specialBlocks as block, index}<button class="action-button secondary" disabled={locked} onclick={() => openSpecialBlock(index)}>编辑{SPECIAL_BLOCK_LABELS[block.kind]}：{String(block.metadata?.title ?? block.metadata?.summary ?? block.metadata?.videoId ?? `第 ${index + 1} 块`)}</button>{/each}</div>{/if}
  <div class="spacing-tools"><button class="action-button secondary" disabled={locked} onclick={insertBlankLine}>插入空白行</button><p>可视化模式可连续按 Enter 留白；源码里的普通空行只分隔段落，需要显示留白时用此按钮。</p></div>
@@ -481,6 +514,7 @@ onDestroy(() => controller.abort());
  </div>
  <ImageDialog open={imageOpen} capabilities={mediaCapabilities} {mode} storageSlug={storageId} onclose={() => imageOpen = false} oninsert={insertImage} />
  {#if specialFields}<SpecialBlockDialog fields={specialFields} editing={specialTarget !== undefined} onsave={saveSpecialBlock} onclose={() => specialFields = undefined} />{/if}
+ {#if linkOpen}<ConfiguredLinkDialog {capabilities} selectedText={linkSelectedText} oninsert={(text, style) => { void insertLink(text, style); }} onclose={() => linkOpen = false} />{/if}
 </section>
 
 {#snippet renderField(field: EditorFieldConfig)}

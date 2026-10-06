@@ -3,7 +3,11 @@ import type {
 	FrontmatterCodec,
 	ValidatedArticleFrontmatter,
 } from "../modules/articles/article-schema";
-import { parseSlug } from "./slug-utils";
+import { parseSlug, parseStorageId } from "./slug-utils";
+
+function parsePublicSlug(codec: FrontmatterCodec, value: unknown): string {
+	return codec.slugPolicy === "unicode" ? parseStorageId(value, "unicode") : parseSlug(value);
+}
 
 const FRONTMATTER_DELIMITER = "---";
 const FRONTMATTER_MAX_LENGTH = 64 * 1024;
@@ -87,7 +91,7 @@ export function serializeFrontmatter(
 	slugInput?: unknown,
 ): string {
 	const frontmatter = codec.schema.parse(frontmatterInput);
-	const slug = slugInput === undefined ? undefined : parseSlug(slugInput);
+	const slug = slugInput === undefined ? undefined : parsePublicSlug(codec, slugInput);
 
 	return stringify(createSerializableFrontmatter(codec, frontmatter, slug), YAML_SERIALIZE_OPTIONS);
 }
@@ -129,7 +133,7 @@ export function parseFrontmatter(codec: FrontmatterCodec, source: unknown): Pars
 
 	return {
 		frontmatter: codec.schema.parse(record),
-		...(rawSlug === undefined ? {} : { slug: parseSlug(rawSlug) }),
+		...(rawSlug === undefined ? {} : { slug: parsePublicSlug(codec, rawSlug) }),
 	};
 }
 
@@ -160,7 +164,7 @@ export function parseEditableFrontmatter(
 	return {
 		frontmatter: codec.schema.parse(known),
 		unknownFrontmatter,
-		...(rawSlug === undefined ? {} : { slug: parseSlug(rawSlug) }),
+		...(rawSlug === undefined ? {} : { slug: parsePublicSlug(codec, rawSlug) }),
 	};
 }
 
@@ -188,7 +192,7 @@ export function serializeEditableFrontmatter(
 		}
 	}
 
-	const slug = slugInput === undefined ? undefined : parseSlug(slugInput);
+	const slug = slugInput === undefined ? undefined : parsePublicSlug(codec, slugInput);
 	return stringify(
 		{ ...createSerializableFrontmatter(codec, frontmatter, slug), ...unknownFrontmatter },
 		YAML_SERIALIZE_OPTIONS,

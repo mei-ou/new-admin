@@ -1,8 +1,9 @@
+import { slug as slugify } from "github-slugger";
 import { z } from "zod";
 import { buildExpectedArticleUrl } from "../../../core/config/article-url";
 import type { ArticlePathConfig } from "../../../core/security/path-policy";
 import type { GitProvider } from "../../../providers/git/types";
-import { parseSlug } from "../../../utils/slug-utils";
+import { parseSlug, parseStorageId } from "../../../utils/slug-utils";
 import type { FrontmatterCodec } from "../article-schema";
 import {
 	readFrontmatterNullableText,
@@ -41,7 +42,7 @@ export interface ListArticleLinkTargetsDependencies {
 
 function buildArticleHref(template: string | undefined, slug: string): string {
 	const expectedUrl = buildExpectedArticleUrl(template, slug);
-	if (!expectedUrl) return `/posts/${encodeURIComponent(slug)}/`;
+	if (!expectedUrl) return `/posts/${slug.split("/").map(encodeURIComponent).join("/")}/`;
 	const url = new URL(expectedUrl);
 	return `${url.pathname}${url.search}`;
 }
@@ -95,7 +96,18 @@ export async function listArticleLinkTargets(
 						pathConfig: dependencies.pathConfig,
 						codec: dependencies.codec,
 					});
-					const slug = parseSlug(article.slug ?? article.storageSlug);
+					const slug =
+						dependencies.pathConfig.filenamePolicy === "unicode"
+							? parseStorageId(
+									article.slug ??
+										article.storageSlug
+											.split("/")
+											.map((segment) => slugify(segment))
+											.join("/")
+											.replace(/\/index$/, ""),
+									"unicode",
+								)
+							: parseSlug(article.slug ?? article.storageSlug);
 					return {
 						storageSlug: article.storageSlug,
 						slug,

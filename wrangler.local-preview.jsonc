@@ -13,7 +13,7 @@
 		"FEATURE_EXTERNAL_HTTPS_LINKS": "true",
 		"FEATURE_ARTICLE_DELETE": "true",
 		"FEATURE_COVER_MANAGEMENT": "true",
-		"FEATURE_ARTICLE_LINKS": "false",
+		"FEATURE_ARTICLE_LINKS": "true",
 		"IMAGEBED_BASE_URL": "https://pic.narciranran.buzz"
 	}
 }

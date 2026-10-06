@@ -25,6 +25,7 @@ export interface MilkdownEditorHandle {
 	undo(): boolean;
 	redo(): boolean;
 	replaceMarkdown(markdown: string, from?: number, to?: number): boolean;
+	insertWikiLink(markdown: string, from: number, to: number, card: boolean): boolean;
 	replaceRange(
 		text: string,
 		from: number,
@@ -61,9 +62,11 @@ let flushError = $state("");
 let editorView: EditorView | null = null;
 let editor: Editor | undefined;
 let parser: ((markdown: string) => Node) | undefined;
+let serializeDocument: ((document: Node) => string) | undefined;
 let flushCurrent: (() => string) | undefined;
 let bridge: typeof import("./bridge") | undefined;
 let projection: BridgeProjection | undefined;
+let historyProjections: BridgeProjection[] = [];
 let sourceRemarkOptions: { projection: BridgeProjection["visualProjection"] } | undefined;
 let currentSource = "";
 let syncingExternal = false;
@@ -119,18 +122,38 @@ function selectionTouchesProtectedNode(): boolean {
 	return rangeTouchesProtectedNode(selection.from, selection.to);
 }
 
-function markdownFragment(markdown: string): Fragment | undefined {
+function markdownFragment(markdown: string, block = false): Fragment | undefined {
 	if (!parser || !bridge || !sourceRemarkOptions) return undefined;
 	const previousProjection = sourceRemarkOptions.projection;
 	try {
 		sourceRemarkOptions.projection = bridge.projectCodecToMilkdownMarkdown(markdown).visualProjection;
 		const parsed = parser(markdown);
 		const first = parsed.firstChild;
-		if (parsed.childCount === 1 && first?.type.name === "paragraph") return first.content;
+		if (!block && parsed.childCount === 1 && first?.type.name === "paragraph") return first.content;
 		return parsed.content;
 	} finally {
 		sourceRemarkOptions.projection = previousProjection;
 	}
+}
+
+function insertWikiLink(markdown: string, from: number, to: number, card: boolean): boolean {
+	if (!editorView || !bridge || !projection || !serializeDocument || disabled || rangeTouchesProtectedNode(from, to)) return false;
+	try {
+		const fragment = markdownFragment(markdown, card);
+		if (!fragment) return false;
+		const state = editorView.state;
+		const transaction = state.tr.setSelection(TextSelection.create(state.doc, from, to)).replaceSelection(new Slice(fragment, 0, 0));
+		const next = bridge.flushWikiLinkInsertion(projection, serializeDocument(transaction.doc), markdown);
+		historyProjections.push(projection, next);
+		syncingExternal = true;
+		try { editorView.dispatch(transaction.scrollIntoView()); } finally { syncingExternal = false; }
+		projection = next;
+		currentSource = next.source;
+		flushError = "";
+		onchange?.(next.source);
+		editorView.focus();
+		return true;
+	} catch { return false; }
 }
 
 function replaceMarkdown(markdown: string, from?: number, to?: number): boolean {
@@ -234,12 +257,25 @@ function runCommand(command: VisualEditorCommand): boolean {
 }
 
 function runHistoryCommand(command: "undo" | "redo"): boolean {
-	if (!editorView || disabled) return false;
-	const handled = (command === "undo" ? undo : redo)(editorView.state, (transaction) =>
-		editorView?.dispatch(transaction),
-	);
+	if (!editorView || !bridge || !projection || !serializeDocument || disabled) return false;
+	let accepted = false;
+	const handled = (command === "undo" ? undo : redo)(editorView.state, (transaction) => {
+		if (!editorView || !bridge || !projection || !serializeDocument) return;
+		try {
+			const next = bridge.flushValidatedHistory([projection, ...historyProjections], serializeDocument(transaction.doc));
+			syncingExternal = true;
+			try { editorView.dispatch(transaction); } finally { syncingExternal = false; }
+			projection = next;
+			currentSource = next.source;
+			flushError = "";
+			onchange?.(next.source);
+			accepted = true;
+		} catch (error) {
+			flushError = error instanceof Error ? error.message : "撤销未通过源码保护校验。";
+		}
+	});
 	if (handled) editorView.focus();
-	return handled;
+	return handled && accepted;
 }
 
 function exposeHandle(): void {
@@ -254,6 +290,7 @@ function exposeHandle(): void {
 		undo: () => runHistoryCommand("undo"),
 		redo: () => runHistoryCommand("redo"),
 		replaceMarkdown,
+		insertWikiLink,
 		replaceRange,
 		replaceSelection,
 	});
@@ -339,6 +376,7 @@ async function mountEditor(): Promise<void> {
 		editor = createdEditor;
 		editorView = createdEditor.action((ctx) => ctx.get(core.editorViewCtx));
 		parser = createdEditor.action((ctx) => ctx.get(core.parserCtx));
+		serializeDocument = (document) => createdEditor.action((ctx) => ctx.get(core.serializerCtx)(document));
 		flushCurrent = () => {
 			if (!projection || !editor || !editorView || !mounted || generation !== mountGeneration) {
 				throw new TypeError("所见即所得编辑器尚未完成挂载。");
@@ -354,7 +392,15 @@ async function mountEditor(): Promise<void> {
 			if (changed) onchange?.(next.source);
 			return next.source;
 		};
-		editorView.setProps({ editable: () => !disabled });
+		editorView.setProps({ editable: () => !disabled, handleKeyDown: (_, event) => {
+			if (!(event.ctrlKey || event.metaKey) || event.altKey) return false;
+			const key = event.key.toLowerCase();
+			if (key !== "z" && key !== "y") return false;
+			event.preventDefault();
+			runHistoryCommand(key === "y" || event.shiftKey ? "redo" : "undo");
+			return true;
+		} });
+		historyProjections = [initialProjection];
 		const dom = host.querySelector<HTMLElement>(".ProseMirror");
 		if (dom) {
 			dom.setAttribute("role", "textbox");
@@ -390,6 +436,7 @@ onMount(() => {
 		editor = undefined;
 		editorView = null;
 		flushCurrent = undefined;
+		serializeDocument = undefined;
 		bridge = undefined;
 		sourceRemarkOptions = undefined;
 		if (currentEditor) void currentEditor.destroy(true);
@@ -415,6 +462,7 @@ $effect(() => {
 			);
 			editorView.dispatch(transaction);
 			projection = nextProjection;
+			historyProjections = [nextProjection];
 			currentSource = nextValue;
 			flushError = "";
 		} finally {

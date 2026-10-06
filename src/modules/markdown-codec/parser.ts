@@ -17,6 +17,7 @@ import type {
 	MarkdownStructuredNodeKind,
 } from "./types";
 import { recognizeMarkdownVideo } from "./video";
+import { findNextWikiLink } from "./wiki-link";
 
 export interface ParseMarkdownDocumentOptions {
 	readonly maxIterations?: number;
@@ -94,7 +95,8 @@ function appendInlineTextAndMath(
 			const codeEnd = findInlineCodeEnd(source, currentOffset, range.to);
 			if (codeEnd !== null) {
 				let nextDollar = codeEnd;
-				while (nextDollar < range.to && source[nextDollar] !== "$") nextDollar += 1;
+				while (nextDollar < range.to && source[nextDollar] !== "$" && source[nextDollar] !== "[")
+					nextDollar += 1;
 				appendTextNode(source, { from: currentOffset, to: nextDollar }, nodes);
 				currentOffset = nextDollar;
 				continue;
@@ -102,6 +104,16 @@ function appendInlineTextAndMath(
 		}
 		const probeRange = { from: currentOffset, to: range.to };
 		const recognition = recognizeMarkdownMath(source, probeRange);
+		const wikiLink = findNextWikiLink(source, probeRange);
+		if (
+			wikiLink &&
+			(!recognition.recognized || wikiLink.range.from < recognition.node.range.from)
+		) {
+			appendTextNode(source, { from: currentOffset, to: wikiLink.range.from }, nodes, plainKind);
+			nodes.push(wikiLink);
+			currentOffset = wikiLink.range.to;
+			continue;
+		}
 		if (!recognition.recognized) {
 			appendTextNode(source, probeRange, nodes, plainKind);
 			return;

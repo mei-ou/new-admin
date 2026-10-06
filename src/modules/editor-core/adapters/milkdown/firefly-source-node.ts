@@ -42,7 +42,7 @@ function isProtectedNode(node: EditorVisualProjectionNode): boolean {
 }
 
 function isBlockNode(node: EditorVisualProjectionNode): boolean {
-	return node.category === "opaque" || node.kind !== "math-inline";
+	return node.category === "opaque" || (node.kind !== "math-inline" && node.kind !== "wiki-link");
 }
 
 function overlaps(position: RemarkPosition | undefined, from: number, to: number): boolean {
@@ -209,6 +209,7 @@ function createSourceNodeView(): NodeViewConstructor {
 			sourceAttrs.category === "opaque"
 				? "源码保真块"
 				: ({
+						"wiki-link": "Wiki Link",
 						callout: "提示框",
 						details: "折叠内容",
 						"math-block": "数学公式",

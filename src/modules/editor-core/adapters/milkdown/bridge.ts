@@ -111,6 +111,50 @@ export function flushMilkdownMarkdown(
 	return edited;
 }
 
+export function flushWikiLinkInsertion(
+	original: BridgeProjection,
+	serialized: string,
+	insertedSource: string,
+): BridgeProjection {
+	const inserted = projectCodecToMilkdownMarkdown(insertedSource).visualProjection.nodes.filter(
+		(node) => node.category !== "structured",
+	);
+	if (
+		inserted.length !== 1 ||
+		inserted[0]?.category !== "placeholder" ||
+		inserted[0].kind !== "wiki-link"
+	)
+		throw new TypeError("Only one validated Wiki Link may be inserted.");
+	const next = projectCodecToMilkdownMarkdown(serialized);
+	const expected = protectedSignatures(original.visualProjection);
+	const actual = protectedSignatures(next.visualProjection);
+	const added = protectedSignatures(
+		projectCodecToMilkdownMarkdown(insertedSource).visualProjection,
+	)[0];
+	const valid = actual.some(
+		(signature, index) =>
+			signature === added &&
+			actual.length === expected.length + 1 &&
+			actual
+				.filter((_, candidate) => candidate !== index)
+				.every((value, candidate) => value === expected[candidate]),
+	);
+	if (!valid) throw new TypeError("Wiki Link insertion changed unrelated protected source.");
+	return next;
+}
+
+export function flushValidatedHistory(
+	trusted: readonly BridgeProjection[],
+	serialized: string,
+): BridgeProjection {
+	for (const snapshot of trusted) {
+		try {
+			return flushMilkdownMarkdown(snapshot, serialized);
+		} catch {}
+	}
+	throw new TypeError("History changed an unvalidated protected source slice.");
+}
+
 /**
  * Validates source metadata collected from actual Milkdown NodeViews before a source transaction.
  * The returned projection still comes from the original Markdown; NodeView DOM/attrs are never a
