@@ -209,6 +209,7 @@ function createSourceNodeView(): NodeViewConstructor {
 			sourceAttrs.category === "opaque"
 				? "源码保真块"
 				: ({
+						"image-layout": "图片／图片组（使用上方编辑按钮修改）",
 						"wiki-link": "Wiki Link",
 						callout: "提示框",
 						details: "折叠内容",

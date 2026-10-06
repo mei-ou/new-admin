@@ -1,3 +1,4 @@
+import { parseImageLayout } from "../../../integrations/newfirefly/image-layout.mjs";
 import { recognizeMarkdownCallout } from "./callout";
 import { recognizeMarkdownDetails } from "./details";
 import { type CreateMarkdownCodecDocumentResult, createMarkdownCodecDocument } from "./document";
@@ -319,7 +320,32 @@ export function parseMarkdownDocument(
 				break;
 			}
 			const candidateRange = getCandidateRange(lines, lineIndex, endIndex);
-			if (fence.info === "mermaid") {
+			if (fence.info === "image-layout") {
+				const body = source
+					.slice(candidateRange.from, candidateRange.to)
+					.trim()
+					.split(/\r?\n/)
+					.slice(1, -1)
+					.join("\n");
+				if (parseImageLayout(body)) {
+					nodes.push({
+						category: "source-placeholder",
+						kind: "image-layout",
+						dirty: false,
+						range: candidateRange,
+						sourceSlice: source.slice(candidateRange.from, candidateRange.to),
+						metadata: { body },
+					});
+				} else {
+					createFailureOpaque(
+						source,
+						candidateRange,
+						"Invalid image layout remains opaque.",
+						nodes,
+						diagnostics,
+					);
+				}
+			} else if (fence.info === "mermaid") {
 				const recognition = recognizeMarkdownMermaid(source, candidateRange);
 				if (!appendRecognizerNode(source, candidateRange, recognition, nodes, diagnostics)) {
 					createFailureOpaque(

@@ -23,6 +23,14 @@ export interface MarkdownCodecNodeDefinition {
  */
 const MARKDOWN_CODEC_NODE_DEFINITION_SOURCE = [
 	{
+		kind: "image-layout",
+		category: "source-placeholder",
+		status: "placeholder",
+		preserveUntouchedSource: true,
+		allowsNetwork: false,
+		allowsUserHtml: false,
+	},
+	{
 		kind: "wiki-link",
 		category: "source-placeholder",
 		status: "placeholder",

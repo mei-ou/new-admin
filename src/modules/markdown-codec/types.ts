@@ -19,6 +19,7 @@ export type MarkdownSourcePlaceholderKind =
 	| "math-inline"
 	| "mermaid"
 	| "video"
+	| "image-layout"
 	| "wiki-link";
 
 export type MarkdownCalloutType = "caution" | "important" | "note" | "tip" | "warning";

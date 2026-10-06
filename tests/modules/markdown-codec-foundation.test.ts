@@ -60,6 +60,7 @@ const ALL_PLACEHOLDER_KINDS = [
 	"mermaid",
 	"video",
 	"wiki-link",
+	"image-layout",
 ] as const satisfies readonly MarkdownSourcePlaceholderKind[];
 
 type MissingStructuredKind = Exclude<

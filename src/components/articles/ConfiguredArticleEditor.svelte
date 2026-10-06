@@ -25,7 +25,9 @@ import {
 	createMarkdownImage,
 	type InlineMarkdownCommand,
 } from "./editor-commands";
-import ImageDialog from "./ImageDialog.svelte";
+import ImageLayoutDialog from "./ImageLayoutDialog.svelte";
+import type { ImageLayout } from "../../../integrations/newfirefly/image-layout.mjs";
+import { listArticleImages, prepareImageReplacement, replaceArticleImage, type ArticleImageBlock } from "./image-layout-state";
 import { uploadImageBedImage } from "./imagebed-client";
 import SpecialBlockDialog from "./SpecialBlockDialog.svelte";
 import ConfiguredLinkDialog from "./ConfiguredLinkDialog.svelte";
@@ -57,6 +59,11 @@ let message = $state("");
 let source = $state(false);
 let dirty = $state(false);
 let imageOpen = $state(false);
+let imageFields = $state<ImageLayout>({ layout: "single", width: 100, align: "center", columns: 3, images: [{ src: "", alt: "", title: "" }] });
+let imageTarget = $state<ArticleImageBlock>();
+let imageSnapshot = "";
+let imageInsertion = { from: 0, to: 0 };
+const articleImages = $derived(listArticleImages(markdown));
 let linkOpen = $state(false);
 let linkSelection = { from: 0, to: 0, text: "" };
 let linkSelectedText = $state("");
@@ -69,15 +76,8 @@ let pendingSourcePosition: number | undefined;
 const specialBlocks = $derived(listSpecialBlocks(markdown));
 let visual = $state<MilkdownEditorHandle>();
 let code = $state<CodeMirrorEditorHandle>();
-let savedSelection: { from: number; to: number; text: string } | undefined;
 let pending = $state<ConfiguredPendingWrite>();
 const controller = new AbortController();
-const mediaCapabilities = $derived({
-	...capabilities,
-	smallImageUpload: false,
-	pdfAttachmentUpload: false,
-	repositoryBrowser: false,
-});
 let locked = $derived(
 	loading ||
 		busy ||
@@ -222,18 +222,29 @@ function insertBlankLine() {
 		message = String(error);
 	}
 }
-function openImage() {
-	savedSelection = selection();
-	imageOpen = true;
-}
-async function insertImage(text: string) {
-	imageOpen = false;
-	await tick();
+function openImage(index?: number) {
+	if (locked) return;
 	try {
-		insert(text, savedSelection);
-	} catch (error) {
-		message = `${String(error)} 插入内容：${text}`;
-	}
+		if (!source && visual) markdown = visual.flush();
+		imageSnapshot = markdown;
+		imageTarget = index === undefined ? undefined : listArticleImages(markdown)[index];
+		if (index !== undefined && !imageTarget) throw new Error("图片内容已变化，请重新选择图片。");
+		imageFields = imageTarget?.fields ?? { layout: "single", width: 100, align: "center", columns: 3, images: [{ src: "", alt: "", title: "" }] };
+		imageInsertion = source ? selection() : { from: markdown.length, to: markdown.length };
+		imageOpen = true;
+	} catch (error) { message = String(error); }
+}
+function saveImageLayout(block: string) {
+	if (markdown !== imageSnapshot) throw new Error("正文已变化，请关闭并重新打开图片窗口。");
+	const replacement = imageTarget ? prepareImageReplacement(imageTarget, block) : block;
+	const next = imageTarget ? replaceArticleImage(markdown, imageTarget, replacement) : insertSpecialBlock(markdown, imageInsertion.from, imageInsertion.to, replacement);
+	if (source && code) {
+		const range = imageTarget?.range ?? imageInsertion;
+		const content = imageTarget && replacement.startsWith("![") ? replacement : `\n\n${replacement}\n${imageTarget ? "" : "\n"}`;
+		code.replaceRange(content, range.from, range.to);
+	} else { markdown = next; editorRevision += 1; }
+	dirty = true;
+	imageOpen = false;
 }
 
 async function upload(file: File, cover = false) {
@@ -492,9 +503,10 @@ onDestroy(() => controller.abort());
  </fieldset>
  <section class="body-panel" aria-label="正文编辑">
  <div class="panel-heading"><div><h2>正文</h2><p>直接输入并排版，也可以粘贴或拖入图片。</p></div><button class="action-button secondary mode-switch" disabled={locked} onclick={switchMode}>{source ? "切换可视化编辑" : "切换 Markdown 源码"}</button></div>
- <EditorToolbar disabled={locked} showLink={capabilities.articleLinks || capabilities.externalHttpsLinks} showImage={capabilities.imageBedUpload || capabilities.externalHttpsLinks} oninline={(command) => format(command, true)} onblock={(command) => format(command)} onheading={(command) => format(command)} onlink={openLink} onimage={openImage} onundo={() => (source ? code : visual)?.undo()} onredo={() => (source ? code : visual)?.redo()} onspecial={() => openSpecialBlock()} />
+ <EditorToolbar disabled={locked} showLink={capabilities.articleLinks || capabilities.externalHttpsLinks} showImage={capabilities.imageBedUpload || capabilities.externalHttpsLinks} oninline={(command) => format(command, true)} onblock={(command) => format(command)} onheading={(command) => format(command)} onlink={openLink} onimage={() => openImage()} onundo={() => (source ? code : visual)?.undo()} onredo={() => (source ? code : visual)?.redo()} onspecial={() => openSpecialBlock()} />
  <p class="field-hint">特殊块可通过表单填写；可视化模式新增到正文末尾，源码模式插入到光标位置。</p>
  {#if specialBlocks.length}<div class="special-blocks" aria-label="已有特殊块">{#each specialBlocks as block, index}<button class="action-button secondary" disabled={locked} onclick={() => openSpecialBlock(index)}>编辑{SPECIAL_BLOCK_LABELS[block.kind]}：{String(block.metadata?.title ?? block.metadata?.summary ?? block.metadata?.videoId ?? `第 ${index + 1} 块`)}</button>{/each}</div>{/if}
+ {#if articleImages.length}<div class="article-image-list" aria-label="已插入图片">{#each articleImages as block, index}<button class="article-image-edit" disabled={locked} onclick={() => openImage(index)}><img src={block.fields.images[0]?.src} alt="" loading="lazy" referrerpolicy="no-referrer" /><span>编辑／换图：{block.fields.images[0]?.alt || `第 ${index + 1} 组`}<small>{block.fields.images.length} 张 · {block.fields.layout === "single" ? "单图" : "图片组"}</small></span></button>{/each}</div>{/if}
  <div class="spacing-tools"><button class="action-button secondary" disabled={locked} onclick={insertBlankLine}>插入空白行</button><p>可视化模式可连续按 Enter 留白；源码里的普通空行只分隔段落，需要显示留白时用此按钮。</p></div>
  <div class="editor-workspace" role="group" aria-label="文章正文" onpastecapture={pasted} ondropcapture={dropped} ondragover={(event) => { if (capabilities.imageBedUpload && !locked && event.dataTransfer?.types.includes("Files")) event.preventDefault(); }}>
   {#if loading}<p role="status">正在读取文章正文…</p>{:else}
@@ -512,7 +524,7 @@ onDestroy(() => controller.abort());
   <button class="action-button primary" disabled={locked} onclick={() => submit("publish")}>发布文章</button>
   {#if mode === "edit" && capabilities.articleDelete}<button class="action-button danger" disabled={locked} onclick={() => submit("draft", true)}>删除文章</button>{/if}</div>
  </div>
- <ImageDialog open={imageOpen} capabilities={mediaCapabilities} {mode} storageSlug={storageId} onclose={() => imageOpen = false} oninsert={insertImage} />
+ {#if imageOpen}<ImageLayoutDialog fields={imageFields} editing={imageTarget !== undefined} canUpload={capabilities.imageBedUpload} onclose={() => imageOpen = false} onsave={saveImageLayout} />{/if}
  {#if specialFields}<SpecialBlockDialog fields={specialFields} editing={specialTarget !== undefined} onsave={saveSpecialBlock} onclose={() => specialFields = undefined} />{/if}
  {#if linkOpen}<ConfiguredLinkDialog {capabilities} selectedText={linkSelectedText} oninsert={(text, style) => { void insertLink(text, style); }} onclose={() => linkOpen = false} />{/if}
 </section>
@@ -531,6 +543,11 @@ onDestroy(() => controller.abort());
 {/snippet}
 
 <style>
+ .article-image-list { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-block: 0.75rem; }
+ .article-image-edit { display: flex; align-items: center; gap: 0.6rem; max-width: 100%; min-width: 0; padding: 0.6rem; border: 1px solid var(--border); border-radius: 0.6rem; color: var(--text-primary); background: var(--surface); font: inherit; text-align: left; cursor: pointer; }
+ .article-image-edit img { width: 3rem; height: 3rem; object-fit: contain; flex: none; }
+ .article-image-edit span { min-width: 0; overflow-wrap: anywhere; }
+ .article-image-edit small { display: block; color: var(--text-secondary); }
  .special-blocks { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 	.spacing-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 0.75rem; padding: 0.75rem 0; }
 	.spacing-tools p { flex: 1; min-width: 12rem; margin: 0; color: var(--text-secondary); font-size: 0.8rem; }
