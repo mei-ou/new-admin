@@ -3,6 +3,8 @@ import type { MilkdownPlugin } from "@milkdown/kit/ctx";
 import type { NodeViewConstructor } from "@milkdown/kit/prose/view";
 import type { NodeSchema, RemarkPluginRaw } from "@milkdown/kit/transformer";
 import type { EditorVisualProjection, EditorVisualProjectionNode } from "../../projection";
+import { createImageLayoutPreview } from "./image-layout-preview";
+import "../../../../../integrations/newfirefly/image-layout.css";
 
 export const FIREFLY_SOURCE_BLOCK = "firefly_source_block";
 export const FIREFLY_SOURCE_INLINE = "firefly_source_inline";
@@ -242,7 +244,8 @@ function createSourceNodeView(): NodeViewConstructor {
 			chip.className = "firefly-source-chip";
 			chip.textContent = sourceLabel;
 			const state = document.createElement("span");
-			state.textContent = "源码保真 · 不执行";
+			state.textContent =
+				sourceAttrs.kind === "image-layout" ? "图片预览 · 源码保真" : "源码保真 · 不执行";
 			name.appendChild(chip);
 			name.appendChild(state);
 			const actions = document.createElement("div");
@@ -270,6 +273,16 @@ function createSourceNodeView(): NodeViewConstructor {
 			head.appendChild(actions);
 			const body = document.createElement("div");
 			body.className = "firefly-source-body";
+			const imagePreview =
+				sourceAttrs.kind === "image-layout"
+					? createImageLayoutPreview(sourceAttrs.sourceSlice)
+					: undefined;
+			if (imagePreview) {
+				body.appendChild(imagePreview);
+				dom.appendChild(head);
+				dom.appendChild(body);
+				return;
+			}
 			const summary = document.createElement("div");
 			summary.className = "firefly-source-summary";
 			const mark = document.createElement("span");

@@ -34,6 +34,7 @@ onMount(() => {
 	}
 	onready?.({
 		focus: () => nativeInput.focus(),
+		selectAtPoint: () => false,
 		getSelection: () => ({ from: nativeInput.selectionStart, to: nativeInput.selectionEnd, text: nativeInput.value.slice(nativeInput.selectionStart, nativeInput.selectionEnd) }),
 		replaceRange: replaceFallback,
 		replaceSelection: (text, selectionFrom, selectionTo) => replaceFallback(text, nativeInput.selectionStart, nativeInput.selectionEnd, selectionFrom, selectionTo),
@@ -53,6 +54,7 @@ onMount(() => {
 			if (hadFocus) { currentRuntime.replaceRange("", selection.from, selection.from, 0, selection.to - selection.from); currentRuntime.focus(); }
 			onready?.({
 				focus: () => currentRuntime.focus(),
+				selectAtPoint: (left, top) => currentRuntime.selectAtPoint(left, top),
 				getSelection: () => currentRuntime.getSelection(),
 				replaceRange: (text, from, to, selectionFrom, selectionTo) =>
 					currentRuntime.replaceRange(text, from, to, selectionFrom, selectionTo),

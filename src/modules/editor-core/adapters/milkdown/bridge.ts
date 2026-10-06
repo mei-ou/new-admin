@@ -116,15 +116,28 @@ export function flushWikiLinkInsertion(
 	serialized: string,
 	insertedSource: string,
 ): BridgeProjection {
+	return flushProtectedInsertion(original, serialized, insertedSource, "wiki-link");
+}
+
+export function flushImageLayoutInsertion(
+	original: BridgeProjection,
+	serialized: string,
+	insertedSource: string,
+): BridgeProjection {
+	return flushProtectedInsertion(original, serialized, insertedSource, "image-layout");
+}
+
+function flushProtectedInsertion(
+	original: BridgeProjection,
+	serialized: string,
+	insertedSource: string,
+	kind: "wiki-link" | "image-layout",
+): BridgeProjection {
 	const inserted = projectCodecToMilkdownMarkdown(insertedSource).visualProjection.nodes.filter(
 		(node) => node.category !== "structured",
 	);
-	if (
-		inserted.length !== 1 ||
-		inserted[0]?.category !== "placeholder" ||
-		inserted[0].kind !== "wiki-link"
-	)
-		throw new TypeError("Only one validated Wiki Link may be inserted.");
+	if (inserted.length !== 1 || inserted[0]?.category !== "placeholder" || inserted[0].kind !== kind)
+		throw new TypeError(`Only one validated ${kind} may be inserted.`);
 	const next = projectCodecToMilkdownMarkdown(serialized);
 	const expected = protectedSignatures(original.visualProjection);
 	const actual = protectedSignatures(next.visualProjection);
@@ -139,7 +152,7 @@ export function flushWikiLinkInsertion(
 				.filter((_, candidate) => candidate !== index)
 				.every((value, candidate) => value === expected[candidate]),
 	);
-	if (!valid) throw new TypeError("Wiki Link insertion changed unrelated protected source.");
+	if (!valid) throw new TypeError("Protected insertion changed unrelated protected source.");
 	return next;
 }
 

@@ -4,7 +4,7 @@ import type { ImageLayout } from "../../../integrations/newfirefly/image-layout.
 import { createImageLayoutSource } from "./image-layout-state";
 import { uploadImageBedImage } from "./imagebed-client";
 
-interface Props { fields: ImageLayout; editing: boolean; canUpload: boolean; onsave: (source: string) => void; onclose: () => void; }
+interface Props { fields: ImageLayout; editing: boolean; canUpload: boolean; onsave: (source: string) => void | Promise<void>; onclose: () => void; }
 let { fields, editing, canUpload, onsave, onclose }: Props = $props();
 function initialFields() { return { ...fields, images: fields.images.map(image => ({ ...image })) }; }
 let draft = $state(initialFields());
@@ -18,8 +18,8 @@ onMount(() => {
 	dialog?.showModal();
 	return () => { controller.abort(); if (previous instanceof HTMLElement) previous.focus(); };
 });
-function save() {
-	try { onsave(createImageLayoutSource(draft)); } catch (failure) { error = failure instanceof Error ? failure.message : "图片设置无效。"; }
+async function save() {
+	try { await onsave(createImageLayoutSource(draft)); } catch (failure) { error = failure instanceof Error ? failure.message : "图片设置无效。"; }
 }
 function move(index: number, delta: number) {
 	const next = [...draft.images];
@@ -90,7 +90,7 @@ async function upload(event: Event, replaceIndex?: number) {
   {#if progress}<p role="status">{progress}</p>{/if}
   {#if error}<p role="alert" class="error">{error}</p>{/if}
   <p>换图会保留说明和排版设置。移除或取消不会删除图床文件；保存设置后还需保存或发布文章。</p>
-  {#if !editing}<p>可视化模式新增到正文末尾；源码模式插入到光标位置。已有图片通过“编辑／换图”修改时保留原位置。</p>{/if}
+  {#if !editing}<p>新增图片插入到打开窗口前的光标位置；已有图片通过“编辑／换图”修改时保留原位置。可视化正文会即时显示图片布局。</p>{/if}
   <div class="actions"><button type="button" onclick={onclose}>取消</button><button type="submit" disabled={uploading}>{editing ? "保存图片设置" : "插入正文"}</button></div>
  </form>
 </dialog>

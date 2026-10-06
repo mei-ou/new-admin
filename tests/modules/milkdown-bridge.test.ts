@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
 	flushBridgeNodeViewMetadata,
 	flushBridgeProjection,
+	flushImageLayoutInsertion,
 	flushMilkdownMarkdown,
 	flushValidatedHistory,
 	flushWikiLinkInsertion,
@@ -13,6 +14,35 @@ import {
 } from "../../src/modules/editor-core/adapters/milkdown/firefly-source-node";
 
 describe("隔离 Milkdown bridge source transaction", () => {
+	it("图片组插入正文中间，保留已有特殊块并支持受保护撤销", () => {
+		const image =
+			'```image-layout\n{"layout":"single","width":50,"align":"center","columns":3,"images":[{"src":"https://pic.example.com/file/a.png","alt":"图片"}]}\n```\n';
+		const original = projectCodecToMilkdownMarkdown("前文\n\n后文\n\n> [!NOTE] 保留\n> 内容\n");
+		const serialized = original.source.replace("前文\n\n", `前文\n\n${image}\n`);
+		const inserted = flushImageLayoutInsertion(original, serialized, image);
+		expect(inserted.source).toBe(serialized);
+		expect(inserted.source.indexOf("image-layout")).toBeLessThan(inserted.source.indexOf("后文"));
+		expect(flushValidatedHistory([original, inserted], original.source).source).toBe(
+			original.source,
+		);
+		expect(() =>
+			flushImageLayoutInsertion(original, serialized.replace("保留", "篡改"), image),
+		).toThrow();
+		expect(() => flushImageLayoutInsertion(original, `${serialized}\n${image}`, image)).toThrow();
+	});
+
+	it("图片组插入不能借道添加任意 HTML 或 Wiki", () => {
+		const original = projectCodecToMilkdownMarkdown("正文\n");
+		for (const source of [
+			"<script>alert(1)</script>",
+			"[[路径/文章]]",
+			"```image-layout\n{}\n```\n",
+		]) {
+			expect(() =>
+				flushImageLayoutInsertion(original, `${original.source}\n${source}`, source),
+			).toThrow();
+		}
+	});
 	it("Wiki 撤销与重做仅接受曾验证的保护签名", () => {
 		const original = projectCodecToMilkdownMarkdown("> [!NOTE] 保留\n> 内容\n\n正文\n");
 		const inserted = flushWikiLinkInsertion(

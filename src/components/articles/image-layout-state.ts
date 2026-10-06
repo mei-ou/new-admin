@@ -14,6 +14,23 @@ export interface ArticleImageBlock {
 	sourceSlice: string;
 	fields: ImageLayout;
 }
+
+export function resolveArticleImageTarget(
+	source: string,
+	previous: readonly ArticleImageBlock[],
+	index: number,
+): ArticleImageBlock {
+	const target = previous[index];
+	if (!target) throw new Error("图片内容已变化，请重新选择图片。");
+	const matches = (block: ArticleImageBlock) =>
+		block.format === target.format && block.sourceSlice === target.sourceSlice;
+	const before = previous.filter(matches);
+	const after = listArticleImages(source).filter(matches);
+	if (before.length !== after.length) throw new Error("图片内容已变化，请重新选择图片。");
+	const resolved = after[before.indexOf(target)];
+	if (!resolved) throw new Error("图片内容已变化，请重新选择图片。");
+	return resolved;
+}
 export function readImageLayoutSource(source: string): ImageLayout | undefined {
 	const lines = source.trim().split(/\r?\n/);
 	return parseImageLayout(lines.slice(1, -1).join("\n"));

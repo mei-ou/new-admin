@@ -10,6 +10,7 @@ import {
 	listArticleImages,
 	prepareImageReplacement,
 	replaceArticleImage,
+	resolveArticleImageTarget,
 } from "../../src/components/articles/image-layout-state";
 import {
 	flushMilkdownMarkdown,
@@ -31,6 +32,24 @@ function requireImageBlock(source: string, index = 0) {
 	return block;
 }
 describe("图片排版和已有图片换图", () => {
+	it("画布刷新加入前置图片后，换图仍对应点击的原图片", () => {
+		const source = createImageLayoutSource(fields);
+		const previous = listArticleImages(source);
+		const next = `![新增](https://example.com/new.png)\n\n${source}`;
+		expect(resolveArticleImageTarget(next, previous, 0).sourceSlice).toBe(previous[0]?.sourceSlice);
+		expect(resolveArticleImageTarget(next, previous, 0).format).toBe("layout");
+	});
+	it("重复图片按原顺序定位，数量变化时拒绝猜测", () => {
+		const source = "![相同](https://example.com/a.png)\n\n![相同](https://example.com/a.png)";
+		const previous = listArticleImages(source);
+		const next = `前置文字\n\n${source}`;
+		expect(resolveArticleImageTarget(next, previous, 1).range.from).toBeGreaterThan(
+			resolveArticleImageTarget(next, previous, 0).range.from,
+		);
+		expect(() =>
+			resolveArticleImageTarget(`${next}\n\n![相同](https://example.com/a.png)`, previous, 1),
+		).toThrow();
+	});
 	it("普通图片只换地址时保留段落结构，不强制转换成排版块", () => {
 		const source = '前文 ![说明](https://example.com/old.png "标题") 后文';
 		const block = requireImageBlock(source);

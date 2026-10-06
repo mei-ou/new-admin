@@ -19,6 +19,7 @@ export interface CodeMirrorSelection {
 export interface CodeMirrorEditorHandle {
 	focus(): void;
 	getSelection(): CodeMirrorSelection;
+	selectAtPoint(left: number, top: number): boolean;
 	replaceRange(
 		text: string,
 		from: number,
@@ -89,6 +90,12 @@ export function createCodeMirrorRuntime(options: CodeMirrorRuntimeOptions): Code
 	return {
 		destroy: () => view.destroy(),
 		focus: () => view.focus(),
+		selectAtPoint: (left, top) => {
+			const position = view.posAtCoords({ x: left, y: top });
+			if (position === null) return false;
+			view.dispatch({ selection: { anchor: position } });
+			return true;
+		},
 		getSelection: () => {
 			const selection = view.state.selection.main;
 			return {

@@ -26,6 +26,8 @@ export interface MilkdownEditorHandle {
 	redo(): boolean;
 	replaceMarkdown(markdown: string, from?: number, to?: number): boolean;
 	insertWikiLink(markdown: string, from: number, to: number, card: boolean): boolean;
+	insertImageLayout(markdown: string, from: number, to: number): boolean;
+	selectAtPoint(left: number, top: number): boolean;
 	replaceRange(
 		text: string,
 		from: number,
@@ -137,13 +139,31 @@ function markdownFragment(markdown: string, block = false): Fragment | undefined
 }
 
 function insertWikiLink(markdown: string, from: number, to: number, card: boolean): boolean {
+	return insertProtectedMarkdown(markdown, from, to, card, "wiki-link");
+}
+
+function insertImageLayout(markdown: string, from: number, to: number): boolean {
+	return insertProtectedMarkdown(markdown, from, to, true, "image-layout");
+}
+
+function selectAtPoint(left: number, top: number): boolean {
+	if (!editorView || disabled) return false;
+	const position = editorView.posAtCoords({ left, top });
+	if (!position || rangeTouchesProtectedNode(position.pos, position.pos)) return false;
+	editorView.dispatch(editorView.state.tr.setSelection(TextSelection.near(editorView.state.doc.resolve(position.pos))));
+	return true;
+}
+
+function insertProtectedMarkdown(markdown: string, from: number, to: number, card: boolean, kind: "wiki-link" | "image-layout"): boolean {
 	if (!editorView || !bridge || !projection || !serializeDocument || disabled || rangeTouchesProtectedNode(from, to)) return false;
 	try {
 		const fragment = markdownFragment(markdown, card);
 		if (!fragment) return false;
 		const state = editorView.state;
 		const transaction = state.tr.setSelection(TextSelection.create(state.doc, from, to)).replaceSelection(new Slice(fragment, 0, 0));
-		const next = bridge.flushWikiLinkInsertion(projection, serializeDocument(transaction.doc), markdown);
+		const next = kind === "image-layout"
+			? bridge.flushImageLayoutInsertion(projection, serializeDocument(transaction.doc), markdown)
+			: bridge.flushWikiLinkInsertion(projection, serializeDocument(transaction.doc), markdown);
 		historyProjections.push(projection, next);
 		syncingExternal = true;
 		try { editorView.dispatch(transaction.scrollIntoView()); } finally { syncingExternal = false; }
@@ -291,6 +311,8 @@ function exposeHandle(): void {
 		redo: () => runHistoryCommand("redo"),
 		replaceMarkdown,
 		insertWikiLink,
+		insertImageLayout,
+		selectAtPoint,
 		replaceRange,
 		replaceSelection,
 	});
@@ -424,7 +446,16 @@ onMount(() => {
 	mounted = true;
 	const handleSourceOpen = (event: Event): void => {
 		const detail = (event as CustomEvent<{ sourceRangeFrom?: number }>).detail;
-		if (typeof detail?.sourceRangeFrom === "number") onsource?.(detail.sourceRangeFrom);
+		if (typeof detail?.sourceRangeFrom !== "number" || !flushCurrent || !projection) return;
+		try {
+			flushCurrent();
+			const elements = Array.from(host.querySelectorAll<HTMLElement>('[data-firefly-node="source"]'));
+			const index = elements.indexOf(event.target as HTMLElement);
+			const nodes = projection.visualProjection.nodes.filter(node => node.category === "placeholder" || node.category === "opaque");
+			const node = nodes[index];
+			if (!node || node.sourceSlice !== elements[index]?.dataset.sourceSlice) throw new Error("正文已变化，请重新选择源码块。");
+			onsource?.(node.sourceRange.from);
+		} catch (error) { onerror?.(error instanceof Error ? error.message : "源码位置无法定位。"); }
 	};
 	host.addEventListener("firefly-source-open", handleSourceOpen);
 	void mountEditor();
@@ -532,6 +563,9 @@ $effect(() => {
 	}
 
 	:global(.editor-host .ProseMirror p) { margin: 0.65rem 0; }
+	:global(.editor-host .ProseMirror img) { max-width: 100%; height: auto; }
+	:global(.editor-host .firefly-image-preview) { min-width: 0; --content-meta: var(--text-muted); }
+	:global(.editor-host .firefly-image-preview [hidden]) { display: none; }
 	:global(.editor-host .ProseMirror ul),
 	:global(.editor-host .ProseMirror ol) { padding-left: 1.3rem; }
 	:global(.editor-host .ProseMirror blockquote) {

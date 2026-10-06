@@ -27,7 +27,7 @@ import {
 } from "./editor-commands";
 import ImageLayoutDialog from "./ImageLayoutDialog.svelte";
 import type { ImageLayout } from "../../../integrations/newfirefly/image-layout.mjs";
-import { listArticleImages, prepareImageReplacement, replaceArticleImage, type ArticleImageBlock } from "./image-layout-state";
+import { listArticleImages, prepareImageReplacement, readImageLayoutSource, replaceArticleImage, resolveArticleImageTarget, type ArticleImageBlock } from "./image-layout-state";
 import { uploadImageBedImage } from "./imagebed-client";
 import SpecialBlockDialog from "./SpecialBlockDialog.svelte";
 import ConfiguredLinkDialog from "./ConfiguredLinkDialog.svelte";
@@ -80,6 +80,7 @@ let pending = $state<ConfiguredPendingWrite>();
 const controller = new AbortController();
 let locked = $derived(
 	loading ||
+	(source ? code === undefined : visual === undefined) ||
 		busy ||
 		uploading ||
 		imageOpen ||
@@ -225,17 +226,30 @@ function insertBlankLine() {
 function openImage(index?: number) {
 	if (locked) return;
 	try {
+		const previousImages = articleImages;
 		if (!source && visual) markdown = visual.flush();
 		imageSnapshot = markdown;
-		imageTarget = index === undefined ? undefined : listArticleImages(markdown)[index];
+		imageTarget = index === undefined ? undefined : resolveArticleImageTarget(markdown, previousImages, index);
 		if (index !== undefined && !imageTarget) throw new Error("图片内容已变化，请重新选择图片。");
 		imageFields = imageTarget?.fields ?? { layout: "single", width: 100, align: "center", columns: 3, images: [{ src: "", alt: "", title: "" }] };
-		imageInsertion = source ? selection() : { from: markdown.length, to: markdown.length };
+		imageInsertion = selection();
 		imageOpen = true;
 	} catch (error) { message = String(error); }
 }
-function saveImageLayout(block: string) {
+async function saveImageLayout(block: string) {
 	if (markdown !== imageSnapshot) throw new Error("正文已变化，请关闭并重新打开图片窗口。");
+	if (!source && !imageTarget) {
+		imageFields = readImageLayoutSource(block) ?? imageFields;
+		imageOpen = false;
+		await tick();
+		if (!visual?.insertImageLayout(block, imageInsertion.from, imageInsertion.to)) {
+			message = "图片未插入：请将光标放在普通正文中重试，或切换源码模式。已上传图片仍保留在图片窗口中。";
+			imageOpen = true;
+			return;
+		}
+		dirty = true;
+		return;
+	}
 	const replacement = imageTarget ? prepareImageReplacement(imageTarget, block) : block;
 	const next = imageTarget ? replaceArticleImage(markdown, imageTarget, replacement) : insertSpecialBlock(markdown, imageInsertion.from, imageInsertion.to, replacement);
 	if (source && code) {
@@ -284,6 +298,10 @@ function dropped(event: DragEvent) {
 	if (file && capabilities.imageBedUpload && !locked) {
 		event.preventDefault();
 		event.stopPropagation();
+		if (!(source ? code : visual)?.selectAtPoint(event.clientX, event.clientY)) {
+			message = "请将图片拖到普通正文区域，或先放置光标再粘贴图片。";
+			return;
+		}
 		void upload(file);
 	}
 }
