@@ -10,7 +10,7 @@
 	"vars": {
 		"APP_VERSION": "0.1.0",
 		"APP_ENV": "production",
-		"SITE_ID": "firefly",
+		"SITE_ID": "newfirefly",
 		"ACCESS_TEAM_DOMAIN": "lingering-forest-3a0a.cloudflareaccess.com",
 		"ACCESS_AUDIENCE": "c3f41d062e857140ab1ba37243e7226287e304e60bce75d6096fdd6cf2b441c9",
 		"ADMIN_ORIGIN": "https://blog-admin.narciranran.buzz",
