@@ -85,8 +85,74 @@ describe("图床 Provider", () => {
 			.fn<typeof fetch>()
 			.mockResolvedValue(new Response("test-only-token upstream secret", { status: 401 }));
 		await expect(uploadImageToImageBed(file, config, fetcher)).rejects.toMatchObject({
-			message: "图床上传失败或返回链接无效，请稍后重试。",
+			message: "图床上传接口返回 HTTP 401。请检查图床 API Token 是否有效并具有上传权限。",
 		});
+	});
+
+	it.each([403, 413, 429, 500, 502])("安全显示上游 HTTP %s，不透传正文", async (status) => {
+		const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(config.token, { status }));
+		const failure = await uploadImageToImageBed(file, config, fetcher).catch((error) => error);
+		expect(failure).toMatchObject({
+			status: 502,
+			code: "UPSTREAM_ERROR",
+			message: expect.stringContaining(`HTTP ${status}`),
+		});
+		expect(failure.message).not.toContain(config.token);
+	});
+
+	it.each(["TimeoutError", "AbortError"])("识别超时 %s", async (name) => {
+		const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new DOMException(config.token, name));
+		await expect(uploadImageToImageBed(file, config, fetcher)).rejects.toMatchObject({
+			message: expect.stringContaining("超过 30 秒"),
+		});
+	});
+
+	it("网络异常不透传凭据", async () => {
+		const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new Error(config.token));
+		await expect(uploadImageToImageBed(file, config, fetcher)).rejects.toMatchObject({
+			message:
+				"后台无法完成图床请求，可能是网络、TLS 或重定向被拒绝；请检查图床入口和前置访问验证。",
+		});
+	});
+
+	it.each([
+		[new Error(config.token), "响应读取失败"],
+		[new DOMException(config.token, "TimeoutError"), "超过 30 秒"],
+	])("读取响应时保留安全故障分类 %#", async (error, message) => {
+		const stream = new ReadableStream<Uint8Array>({
+			start(controller) {
+				controller.error(error);
+			},
+		});
+		const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(stream));
+		const failure = await uploadImageToImageBed(file, config, fetcher).catch((error) => error);
+		expect(failure).toMatchObject({ status: 502, message: expect.stringContaining(message) });
+		expect(failure.message).not.toContain(config.token);
+	});
+
+	it.each([
+		[new Response("<html>secret</html>"), "不是有效 JSON"],
+		[Response.json({ error: "secret" }), "缺少单张图片的 src"],
+		[Response.json([{ src: "https://other.example/file/a.png" }]), "未通过安全校验"],
+		[new Response("a".repeat(65 * 1024)), "超过 64 KiB"],
+	])("区分响应阶段错误 %#", async (response, message) => {
+		const fetcher = vi.fn<typeof fetch>().mockResolvedValue(response);
+		await expect(uploadImageToImageBed(file, config, fetcher)).rejects.toMatchObject({
+			status: 502,
+			message: expect.stringContaining(message),
+		});
+	});
+
+	it("WebDAV 使用服务端渠道和 Bearer 鉴权", async () => {
+		const fetcher = vi
+			.fn<typeof fetch>()
+			.mockResolvedValue(Response.json([{ src: "/file/blog/a.png" }]));
+		await uploadImageToImageBed(file, { ...config, channel: "webdav" }, fetcher);
+		const call = fetcher.mock.calls[0];
+		if (!call) throw new Error("未执行上传");
+		const [endpoint, options] = call;
+		expect(new URL(String(endpoint)).searchParams.get("uploadChannel")).toBe("webdav");
+		expect(options?.headers).toEqual({ Authorization: `Bearer ${config.token}` });
 	});
 
 	it("限制上游返回体大小", async () => {

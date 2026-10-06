@@ -63,6 +63,7 @@ export async function uploadImageToImageBed(
 	const body = new FormData();
 	const extension = file.type === "image/jpeg" ? "jpg" : file.type === "image/png" ? "png" : "webp";
 	body.set("file", file, `${crypto.randomUUID()}.${extension}`);
+	let stage: "request" | "body" | "json" | "result" | "link" = "request";
 	try {
 		const response = await fetcher(endpoint, {
 			method: "POST",
@@ -72,11 +73,28 @@ export async function uploadImageToImageBed(
 			signal: AbortSignal.timeout(30_000),
 		});
 		if (!response.ok) {
-			await response.body?.cancel();
-			throw new Error();
+			await response.body?.cancel().catch(() => undefined);
+			const reason =
+				response.status === 401
+					? "请检查图床 API Token 是否有效并具有上传权限。"
+					: response.status === 403
+						? "请求被拒绝，请检查图床访问策略、IP 封禁或前置安全规则。"
+						: response.status === 413
+							? "图床或存储渠道拒绝了文件大小。"
+							: response.status === 429
+								? "图床请求过于频繁，请稍后重试。"
+								: "请检查图床上传渠道、存储和数据库配置，具体原因需查看图床日志。";
+			throw new ApiError(
+				502,
+				"UPSTREAM_ERROR",
+				`图床上传接口返回 HTTP ${response.status}。${reason}`,
+			);
 		}
+		stage = "body";
 		const bytes = await readBoundedBody(response.body, 64 * 1024);
+		stage = "json";
 		const payload: unknown = JSON.parse(new TextDecoder().decode(bytes));
+		stage = "result";
 		const result = Array.isArray(payload) && payload.length === 1 ? payload[0] : payload;
 		if (
 			!result ||
@@ -85,6 +103,7 @@ export async function uploadImageToImageBed(
 			typeof result.src !== "string"
 		)
 			throw new Error();
+		stage = "link";
 		const src = result.src;
 		if (!src || src.length > 2048 || /[\s\\<>"'`]/.test(src) || src.startsWith("//"))
 			throw new Error();
@@ -100,7 +119,23 @@ export async function uploadImageToImageBed(
 		)
 			throw new Error();
 		return url.href;
-	} catch {
-		throw new ApiError(502, "UPSTREAM_ERROR", "图床上传失败或返回链接无效，请稍后重试。");
+	} catch (error) {
+		if (error instanceof ApiError && error.code === "UPSTREAM_ERROR") throw error;
+		if (error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name)) {
+			throw new ApiError(
+				502,
+				"UPSTREAM_ERROR",
+				"图床上传或读取响应超过 30 秒，未确认上传成功；请先检查图床是否已有图片，避免重复上传。",
+			);
+		}
+		const messages = {
+			request:
+				"后台无法完成图床请求，可能是网络、TLS 或重定向被拒绝；请检查图床入口和前置访问验证。",
+			body: "图床响应读取失败或超过 64 KiB，未确认上传成功；请检查图床日志。",
+			json: "图床返回的内容不是有效 JSON，可能返回了登录页或安全验证页；请检查图床前置访问验证。",
+			result: "图床响应缺少单张图片的 src 链接，未确认上传成功；请检查图床接口版本。",
+			link: "图床返回的图片链接未通过安全校验；可能已上传，请先检查图床记录。后台只接受同域名、无查询参数的 HTTPS 或站内绝对路径链接。",
+		};
+		throw new ApiError(502, "UPSTREAM_ERROR", messages[stage]);
 	}
 }
